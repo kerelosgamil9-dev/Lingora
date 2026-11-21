@@ -44,7 +44,22 @@ jobs:
           key: buildozer-project-${{ hashFiles('buildozer.spec') }}
 
       - name: Build debug APK
-        run: buildozer -v android debug
+        run: buildozer -v android debug > build.log 2>&1
+
+      - name: Show the error (only runs if the build failed)
+        if: failure()
+        run: |
+          echo "=========== LAST 70 LINES ==========="
+          tail -n 70 build.log
+          echo "=========== ERROR LINES ==========="
+          grep -n -E "Error|error:|FAILED|Exception|Traceback|No such file|not found|Command failed" build.log | grep -v -E "Wdeprecated|Werror|deprecated|Wno-" | tail -n 40
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
