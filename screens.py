@@ -32,8 +32,8 @@ from strings import tr
 from theme import C, FOLDER_COLORS, HIGHLIGHTS, alpha
 from widgets import (ALabel, ATextInput, BarProgress, Card, ColorDots, Dialog, Divider,
                      FlameWidget, FormField, Icon, IconButton, RButton, Segmented, TapCard,
-                     Toast, Toggle, add_row, auto_card, button, confirm, hbox, label, spacer,
-                     vbox)
+                     Toast, Toggle, WeekStrip, add_row, auto_card, button, confirm, hbox, label,
+                     logo_image, spacer, vbox)
 
 
 # ======================================================================
@@ -180,6 +180,26 @@ class BaseScreen(Screen):
         pass
 
 
+class IconTile(BoxLayout):
+    """Rounded, softly tinted square with an icon in the middle."""
+
+    def __init__(self, icon, color=None, size=dp(48), **kw):
+        kw.setdefault('size_hint', (None, None))
+        kw.setdefault('size', (size, size))
+        kw.setdefault('padding', size * 0.23)
+        super().__init__(**kw)
+        col = list(color or C('primary'))[:3] + [1]
+        with self.canvas.before:
+            Color(*alpha(col, 0.18))
+            self._r = RoundedRectangle(pos=self.pos, size=self.size, radius=[size * 0.3])
+        self.bind(pos=self._u, size=self._u)
+        self.add_widget(Icon(name=icon, color=col))
+
+    def _u(self, *a):
+        self._r.pos = self.pos
+        self._r.size = self.size
+
+
 # ======================================================================
 # Home
 # ======================================================================
@@ -205,8 +225,13 @@ class HomeScreen(BaseScreen):
         streak = db.get_streak()
 
         # --- hero --------------------------------------------------------
-        col.add_widget(label(tr('welcome'), size=24, bold=True))
-        col.add_widget(label(tr('home_sub'), size=15, color='sub'))
+        hero = hbox(dp(58), spacing=dp(12))
+        htxt = BoxLayout(orientation='vertical', spacing=dp(1))
+        htxt.add_widget(label(tr('welcome'), size=22, bold=True, wrap=False, size_hint_y=1))
+        htxt.add_widget(label(tr('home_sub'), size=13, color='sub', wrap=False,
+                              size_hint_y=None, height=dp(22)))
+        add_row(hero, [logo_image(dp(54)), htxt])
+        col.add_widget(hero)
 
         # --- streak + daily goal ---------------------------------------
         card = auto_card(padding=[dp(16), dp(14)], spacing=dp(12), radius=dp(22))
@@ -223,6 +248,7 @@ class HomeScreen(BaseScreen):
         info.add_widget(label(streak_message(streak), size=14, color='sub'))
         add_row(row, [flame, info])
         card.add_widget(row)
+        card.add_widget(WeekStrip(db.week_activity(), tr('weekdays').split(',')))
         done, _ = db.today_answers()
         goal = max(1, db.get_int('daily_goal', 20))
         goal_row = hbox(dp(22))
@@ -278,9 +304,11 @@ class HomeScreen(BaseScreen):
         ]
         if rtl.UI_RTL:
             acts = [acts[1], acts[0], acts[3], acts[2]]
+        tint = {'mode_smart': FOLDER_COLORS[3], 'mode_flash': FOLDER_COLORS[0],
+                'mode_daily': FOLDER_COLORS[4], 'mode_mcq': FOLDER_COLORS[2]}
         for key, icon, cb in acts:
-            inner = BoxLayout(orientation='horizontal', padding=[dp(12), 0], spacing=dp(8))
-            ic = centered(Icon(name=icon, color=C('primary')), (dp(24), dp(24)))
+            inner = BoxLayout(orientation='horizontal', padding=[dp(10), 0], spacing=dp(10))
+            ic = centered(IconTile(icon, color=tint[key], size=dp(38)), (dp(38), dp(38)))
             tl = label(tr(key), size=14, bold=True, autoheight=False, size_hint_y=1)
             add_row(inner, [ic, tl])
             tile = TapCard(padding=0, spacing=0, radius=dp(18))
@@ -325,7 +353,12 @@ class FoldersScreen(BaseScreen):
         app = self.app
         folders = app.db.list_folders()
         if not folders:
-            c = auto_card(padding=[dp(18), dp(20)], spacing=dp(12), radius=dp(22))
+            c = auto_card(padding=[dp(18), dp(22)], spacing=dp(12), radius=dp(22))
+            ic = BoxLayout(size_hint_y=None, height=dp(76))
+            ic.add_widget(Widget())
+            ic.add_widget(IconTile('folder', color=FOLDER_COLORS[0], size=dp(72)))
+            ic.add_widget(Widget())
+            c.add_widget(ic)
             c.add_widget(label(tr('no_folders_title'), size=20, bold=True, align='center'))
             c.add_widget(label(tr('no_folders_text'), size=15, color='sub', align='center'))
             c.add_widget(button(tr('create_folder'), self.add_folder))
@@ -437,12 +470,15 @@ class ItemRow(BoxLayout):
         ar = label(item['ar'], size=19 if word else 16, color='primary', bold=word)
         self.add_widget(ar)
         if item['ex']:
+            box = auto_card(bg_name='card2', padding=[dp(12), dp(8)], spacing=dp(3),
+                            radius=dp(12))
             ex = label(item['ex'], size=15)
             if item['hl_example']:
                 ex.hl = list(HIGHLIGHTS[item['hl_example']])
-            self.add_widget(ex)
+            box.add_widget(ex)
             if item['ex_ar']:
-                self.add_widget(label(item['ex_ar'], size=13, color='sub'))
+                box.add_widget(label(item['ex_ar'], size=13, color='sub'))
+            self.add_widget(box)
 
         acts = hbox(dp(40), spacing=dp(2))
         star = IconButton(name='star', filled=bool(item['mastered']),
@@ -776,6 +812,15 @@ CHALLENGES = [
 ]
 
 
+CHALLENGE_COLORS = {
+    'mode_daily': FOLDER_COLORS[4], 'mode_speed': FOLDER_COLORS[1],
+    'mode_survival': FOLDER_COLORS[6], 'mode_match': FOLDER_COLORS[3],
+    'mode_spell': FOLDER_COLORS[5], 'mode_rev': FOLDER_COLORS[2],
+    'mode_mcq': FOLDER_COLORS[0], 'mode_flash': FOLDER_COLORS[7],
+    'mode_smart': FOLDER_COLORS[3],
+}
+
+
 class ChallengesScreen(BaseScreen):
     def topbar_spec(self):
         return (tr('nav_challenges'), 'menu', [])
@@ -788,7 +833,7 @@ class ChallengesScreen(BaseScreen):
         for key, icon, needs, cfg in CHALLENGES:
             card = TapCard(size_hint_y=None, height=dp(88), padding=[dp(14), dp(10)],
                            spacing=dp(14), orientation='horizontal')
-            tile = centered(IconTile(icon), (dp(48), dp(48)))
+            tile = centered(IconTile(icon, color=CHALLENGE_COLORS.get(key)), (dp(48), dp(48)))
             col_info = BoxLayout(orientation='vertical', spacing=dp(2))
             col_info.add_widget(label(tr(key), size=18, bold=True, wrap=False, size_hint_y=1))
             desc = tr(key + '_d')
@@ -809,25 +854,6 @@ class ChallengesScreen(BaseScreen):
             app.start_game(dict(cfg))
             return
         app.pick_source(cfg['mode'], base=dict(cfg))
-
-
-class IconTile(BoxLayout):
-    """Rounded, softly tinted square with an icon in the middle."""
-
-    def __init__(self, icon, **kw):
-        kw.setdefault('size_hint', (None, None))
-        kw.setdefault('size', (dp(48), dp(48)))
-        kw.setdefault('padding', dp(11))
-        super().__init__(**kw)
-        with self.canvas.before:
-            Color(*alpha(C('primary'), 0.18))
-            self._r = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
-        self.bind(pos=self._u, size=self._u)
-        self.add_widget(Icon(name=icon, color=C('primary')))
-
-    def _u(self, *a):
-        self._r.pos = self.pos
-        self._r.size = self.size
 
 
 # ======================================================================
@@ -951,6 +977,7 @@ class GameScreen(BaseScreen):
     def launch(self):
         self.stop_game()
         self.holder.clear_widgets()
+        self.app.apply_topbar(self)             # title follows the mode that is starting
         cfg = dict(self.app.game_cfg)
         mode = cfg.get('mode')
         if mode == 'flash':
@@ -1020,9 +1047,6 @@ class SettingsScreen(BaseScreen):
         c.add_widget(label(tr('s_language'), size=16, bold=True))
         c.add_widget(Segmented([('ar', 'العربية'), ('en', 'English')], db.get('lang'),
                                on_change=lambda v: self._set_rebuild('lang', v)))
-        c.add_widget(switch_row(tr('s_arabic_fix'), db.get_bool('arabic_fix'),
-                                lambda v: self._set_rebuild('arabic_fix', '1' if v else '0'),
-                                sub=tr('s_arabic_fix_d')))
         col.add_widget(c)
 
         # --- sound ---------------------------------------------------------------

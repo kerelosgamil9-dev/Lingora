@@ -26,6 +26,58 @@ def is_android():
     return ANDROID
 
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def find_asset(name):
+    """Image / file next to the code (flat repo) or inside an assets/ folder."""
+    for p in (os.path.join(_HERE, name), os.path.join(_HERE, 'assets', name)):
+        if os.path.exists(p):
+            return p
+    return None
+
+
+# ---------------------------------------------------------------- system bars
+def _hex(rgb):
+    return '#%02X%02X%02X' % tuple(int(max(0, min(1, c)) * 255) for c in rgb[:3])
+
+
+def set_system_bars(status_rgb, nav_rgb, light_icons):
+    """Colour the Android status bar / navigation bar like the app background.
+    light_icons=True gives dark icons (for light themes). Silent no-op elsewhere."""
+    if not ANDROID:
+        return False
+    try:
+        from android.runnable import run_on_ui_thread
+        from jnius import autoclass
+        activity = get_activity()
+        if activity is None:
+            return False
+        Color = autoclass('android.graphics.Color')
+        LP = autoclass('android.view.WindowManager$LayoutParams')
+        st, nv = _hex(status_rgb), _hex(nav_rgb)
+
+        @run_on_ui_thread
+        def _apply():
+            try:
+                window = activity.getWindow()
+                window.clearFlags(LP.FLAG_TRANSLUCENT_STATUS)
+                window.addFlags(LP.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                window.setStatusBarColor(Color.parseColor(st))
+                window.setNavigationBarColor(Color.parseColor(nv))
+                decor = window.getDecorView()
+                flags = decor.getSystemUiVisibility()
+                light = 0x2000 | 0x10          # LIGHT_STATUS_BAR | LIGHT_NAVIGATION_BAR
+                flags = (flags | light) if light_icons else (flags & ~light)
+                decor.setSystemUiVisibility(flags)
+            except Exception:                  # noqa: BLE001 - cosmetic only
+                pass
+        _apply()
+        return True
+    except Exception:                          # noqa: BLE001
+        return False
+
+
 # ---------------------------------------------------------------- activity
 def get_activity():
     """Return the current Android Activity (or None)."""

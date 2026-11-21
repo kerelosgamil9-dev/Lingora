@@ -7,8 +7,8 @@ RButton       rounded button
 Icon / IconButton   vector icons drawn with the canvas (no icon fonts)
 Card, Divider, BarProgress, Toggle, Segmented, ColorDots
 FlameWidget   the streak fire with real fire colours
-ATextInput, FormField   text inputs with live Arabic preview
-Dialog, Toast, NavDrawer, TopBar
+ATextInput, FormField   text inputs that paint joined Arabic while typing
+WeekStrip, Dialog, Toast, NavDrawer, TopBar
 """
 
 import math
@@ -37,6 +37,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
 import rtl
+from services import find_asset
 from theme import C, alpha, mix
 
 
@@ -215,6 +216,15 @@ class ALabel(Label):
                 radius=[dp(5)]))
 
 
+def logo_image(size):
+    """The Lingora logo as a fixed-size image (falls back to an empty spacer)."""
+    path = find_asset('logo.png')
+    if not path:
+        return Widget(size_hint=(None, None), size=(size, size))
+    from kivy.uix.image import Image
+    return Image(source=path, size_hint=(None, None), size=(size, size), mipmap=True)
+
+
 # ======================================================================
 # Icons
 # ======================================================================
@@ -240,8 +250,9 @@ ICONS = {
     'check': [('L', [.20, .52, .42, .30, .80, .72])],
     'speaker': _SPEAKER + [('A', .50, .50, .20, 45, 135), ('A', .50, .50, .34, 45, 135)],
     'mute': _SPEAKER + [('L', [.64, .36, .88, .64]), ('L', [.64, .64, .88, .36])],
-    'edit': [('L', [.26, .26, .70, .70]), ('L', [.62, .78, .78, .62]),
-             ('T', .14, .14, .22, .36, .36, .22)],
+    'edit': [('LC', [.27, .39, .73, .85, .85, .73, .39, .27]),
+             ('T', .27, .39, .39, .27, .13, .13),
+             ('L', [.60, .72, .72, .60])],
     'trash': [('L', [.20, .76, .80, .76]), ('L', [.40, .76, .40, .86, .60, .86, .60, .76]),
               ('L', [.28, .70, .32, .15, .68, .15, .72, .70]),
               ('L', [.45, .60, .45, .28]), ('L', [.55, .60, .55, .28])],
@@ -420,7 +431,24 @@ class Card(BoxLayout):
 
 
 class TapCard(ButtonBehavior, Card):
-    """Card that can be tapped (children such as icon buttons still work)."""
+    """Card that can be tapped (children such as icon buttons still work).
+    A soft light veil shows while it is pressed."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        with self.canvas.after:
+            self._veil_c = Color(1, 1, 1, 0)
+            self._veil = RoundedRectangle(pos=self.pos, size=self.size, radius=[self.radius])
+        self.bind(pos=self._veil_upd, size=self._veil_upd, radius=self._veil_upd,
+                  state=self._veil_state)
+
+    def _veil_upd(self, *a):
+        self._veil.pos = self.pos
+        self._veil.size = self.size
+        self._veil.radius = [self.radius]
+
+    def _veil_state(self, *a):
+        self._veil_c.rgba = (1, 1, 1, 0.07) if self.state == 'down' else (1, 1, 1, 0)
 
 
 def auto_card(**kw):
@@ -688,14 +716,15 @@ class Segmented(BoxLayout):
 
 
 class ColorDots(BoxLayout):
-    """Row of colour swatches. colors = list of RGBA (None = 'no colour')."""
+    """Row of colour swatches. colors = list of RGBA (None = 'no colour').
+    The swatches share the available width, so the row never overflows."""
 
     selected = NumericProperty(0)
 
     def __init__(self, colors, selected=0, on_change=None, dot=dp(36), **kw):
         kw.setdefault('size_hint_y', None)
         kw['height'] = dot + dp(8)
-        kw.setdefault('spacing', dp(8))
+        kw.setdefault('spacing', dp(4))
         super().__init__(orientation='horizontal', **kw)
         self.colors = colors
         self.selected = selected
@@ -703,7 +732,7 @@ class ColorDots(BoxLayout):
         self._dots = []
         items = []
         for i, col in enumerate(colors):
-            d = _Dot(index=i, rgba=col, size_hint=(None, None), size=(dot, dot))
+            d = _Dot(index=i, rgba=col)
             d.bind(on_release=lambda inst: self._pick(inst.index))
             self._dots.append(d)
             items.append(d)
@@ -751,6 +780,62 @@ class _Dot(ButtonBehavior, Widget):
             if self.active:
                 Color(*C('text'))
                 Line(circle=(cx, cy, s * .5 - dp(1)), width=dp(2))
+
+
+class _DayDot(Widget):
+    """One day of the week strip: filled = studied, ring = today."""
+
+    studied = BooleanProperty(False)
+    today = BooleanProperty(False)
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self._trig = Clock.create_trigger(self._draw, -1)
+        self.bind(pos=self._trig, size=self._trig, studied=self._trig, today=self._trig)
+        self._trig()
+
+    def _draw(self, *a):
+        self.canvas.clear()
+        s = min(self.width, self.height)
+        if s <= 1:
+            return
+        cx, cy = self.center_x, self.center_y
+        r = s / 2.0
+        with self.canvas:
+            if self.studied:
+                Color(*C('accent'))
+                Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+                Color(1, 1, 1, 1)
+                Line(points=[cx - r * .36, cy - r * .02, cx - r * .10, cy - r * .30,
+                             cx + r * .40, cy + r * .28], width=dp(1.9), cap='round',
+                     joint='round')
+            else:
+                Color(*C('card2'))
+                Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+            if self.today:
+                Color(*(C('accent') if self.studied else C('primary')))
+                Line(circle=(cx, cy, r + dp(3)), width=dp(1.6))
+
+
+class WeekStrip(BoxLayout):
+    """Seven small circles for the last seven days (chronological, follows RTL)."""
+
+    def __init__(self, days, letters, **kw):
+        kw.setdefault('size_hint_y', None)
+        kw.setdefault('height', dp(58))
+        kw.setdefault('spacing', dp(4))
+        super().__init__(orientation='horizontal', **kw)
+        cells = []
+        for dd, studied, today in days:
+            col = BoxLayout(orientation='vertical', spacing=dp(3))
+            holder = BoxLayout(padding=[0, dp(4)])
+            holder.add_widget(_DayDot(studied=studied, today=today))
+            col.add_widget(holder)
+            col.add_widget(ALabel(raw=letters[dd.weekday()], font_size=sp(12), bold=today,
+                                  color=C('text') if today else C('sub'), align='center',
+                                  size_hint_y=None, height=dp(18)))
+            cells.append(col)
+        add_row(self, cells)
 
 
 # ======================================================================
@@ -877,24 +962,38 @@ class FlameWidget(Widget):
 # Text inputs
 # ======================================================================
 class ATextInput(TextInput):
-    """Rounded text input.  Arabic hint text is shaped; use FormField to get a
-    live, correctly-shaped preview of what is typed."""
+    """Rounded single-line text input that shows Arabic correctly *while typing*.
+
+    Kivy's own text rendering cannot join Arabic letters, so the real TextInput
+    text is made invisible and the same text is painted on top of it after
+    ``rtl.display`` (shaping + bidi).  The caret is drawn by this widget too and
+    taps are mapped back to the logical cursor position.
+    """
 
     def __init__(self, hint='', **kw):
         kw.setdefault('multiline', False)
         kw.setdefault('background_normal', '')
         kw.setdefault('background_active', '')
         kw.setdefault('background_color', (0, 0, 0, 0))
-        kw.setdefault('foreground_color', C('text'))
-        kw.setdefault('cursor_color', C('primary'))
-        kw.setdefault('hint_text_color', alpha(C('sub'), 0.8))
-        kw.setdefault('selection_color', alpha(C('primary'), 0.35))
         kw.setdefault('font_size', sp(17))
         kw.setdefault('padding', [dp(14), dp(13), dp(14), dp(13)])
         kw.setdefault('write_tab', False)
         kw.setdefault('size_hint_y', None)
         kw.setdefault('height', dp(50))
-        kw['hint_text'] = rtl.display(hint) if hint else ''
+        kw.setdefault('use_handles', False)
+        self._fg = kw.pop('foreground_color', None) or C('text')
+        self._hint_col = kw.pop('hint_text_color', None) or alpha(C('sub'), 0.85)
+        self._caret_col = kw.pop('cursor_color', None) or C('primary')
+        self._hint_raw = hint or ''
+        clear = (0, 0, 0, 0)
+        kw['foreground_color'] = clear          # real text is invisible
+        kw['hint_text_color'] = clear
+        kw['cursor_color'] = clear
+        kw['selection_color'] = clear
+        kw['hint_text'] = ''
+        self._scroll = 0.0
+        self._caret_on = True
+        self._widths = {}
         super().__init__(**kw)
         with self.canvas.before:
             self._c = Color(*C('input'))
@@ -902,60 +1001,199 @@ class ATextInput(TextInput):
             self._cb = Color(*C('border'))
             self._lb = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(12)),
                             width=1.1)
-        self.bind(pos=self._upd, size=self._upd, focus=self._upd)
+            # whatever the TextInput draws next (its own invisible text) inherits
+            # this colour state, so make it fully transparent
+            Color(1, 1, 1, 0)
+        with self.canvas.after:
+            self._tcol = Color(1, 1, 1, 1)
+            self._trect = Rectangle(size=(0, 0))
+            self._ccol = Color(*self._caret_col)
+            self._crect = Rectangle(size=(0, 0))
+        self._blink = Clock.schedule_interval(self._toggle_caret, 0.53)
+        self._trig = Clock.create_trigger(self._redraw, -1)
+        self.bind(pos=self._upd, size=self._upd, focus=self._on_focus,
+                  text=self._trig, cursor=self._trig, font_size=self._trig,
+                  font_name=self._trig, halign=self._trig, padding=self._trig)
+        self._upd()
 
+    # -- public ------------------------------------------------------------
+    @property
+    def hint_raw(self):
+        return self._hint_raw
+
+    @hint_raw.setter
+    def hint_raw(self, v):
+        self._hint_raw = v or ''
+        self._trig()
+
+    # -- frame --------------------------------------------------------------
     def _upd(self, *a):
         self._r.pos = self.pos
         self._r.size = self.size
         self._cb.rgba = C('primary') if self.focus else C('border')
         self._lb.rounded_rectangle = (self.x, self.y, self.width, self.height, dp(12))
         self._lb.width = 1.6 if self.focus else 1.1
+        self._trig()
+
+    def _on_focus(self, *a):
+        self._caret_on = True
+        self._upd()
+
+    def _toggle_caret(self, dt):
+        if not self.get_root_window():
+            return
+        self._caret_on = not self._caret_on
+        self._ccol.a = 1.0 if (self.focus and self._caret_on) else 0.0
+
+    # -- text geometry ---------------------------------------------------------
+    def _base_rtl(self, text):
+        if text:
+            return rtl.base_is_rtl(text)
+        if self._hint_raw:
+            return rtl.base_is_rtl(self._hint_raw)
+        return rtl.UI_RTL
+
+    def _width(self, s, base):
+        key = (s, base, self.font_size, self.font_name)
+        w = self._widths.get(key)
+        if w is None:
+            w = measure_text(rtl.display(s, base) if s else '', self.font_name, self.font_size)
+            if len(self._widths) > 600:
+                self._widths.clear()
+            self._widths[key] = w
+        return w
+
+    def _caret_offset(self, text, index, base, full_w):
+        """x of the caret measured from the left edge of the painted text."""
+        pre = text[:index]
+        w = self._width(pre, base)
+        if base:
+            return max(0.0, full_w - w)
+        return w
+
+    def _redraw(self, *a):
+        text = self.text or ''
+        showing_hint = not text
+        raw = self._hint_raw if showing_hint else text
+        base = self._base_rtl(text)
+        pl, pt, pr, pb = self.padding
+        avail = max(1.0, self.width - pl - pr)
+        # painted texture
+        tex = None
+        if raw:
+            cl = CoreLabel(text=rtl.display(raw, base), font_name=self.font_name,
+                           font_size=self.font_size, color=(1, 1, 1, 1))
+            cl.refresh()
+            tex = cl.texture
+        tw = float(tex.width) if tex else 0.0
+        th = float(tex.height) if tex else self.font_size * 1.3
+        halign = self.halign
+        if halign == 'auto':
+            halign = 'right' if base else 'left'
+        # caret position inside the text image
+        if showing_hint:
+            cx_img = tw if base else 0.0
+        else:
+            cx_img = self._caret_offset(text, self.cursor_index(), base, tw)
+        # horizontal scrolling when the text is wider than the field
+        if tw <= avail:
+            self._scroll = 0.0
+            if halign == 'right':
+                x_img = self.x + pl + (avail - tw)
+            elif halign == 'center':
+                x_img = self.x + pl + (avail - tw) / 2.0
+            else:
+                x_img = self.x + pl
+            vis_tex = tex
+            vis_w = tw
+        else:
+            margin = dp(6)
+            if cx_img - self._scroll < margin:
+                self._scroll = max(0.0, cx_img - margin)
+            elif cx_img - self._scroll > avail - margin:
+                self._scroll = cx_img - (avail - margin)
+            self._scroll = min(max(0.0, self._scroll), tw - avail)
+            x_img = self.x + pl
+            vis_w = avail
+            vis_tex = tex.get_region(self._scroll, 0, avail, th) if tex else None
+        y_img = self.y + (self.height - th) / 2.0
+        if vis_tex is not None:
+            self._tcol.rgba = self._hint_col if showing_hint else self._fg
+            self._trect.texture = vis_tex
+            self._trect.pos = (x_img, y_img)
+            self._trect.size = (vis_w, th)
+        else:
+            self._trect.size = (0, 0)
+        # caret
+        if showing_hint:
+            if halign == 'right':
+                cx = self.x + pl + avail
+            elif halign == 'center':
+                cx = self.center_x
+            else:
+                cx = self.x + pl
+        else:
+            cx = x_img + cx_img - (self._scroll if tw > avail else 0.0)
+        ch = min(self.height - dp(14), self.font_size * 1.45)
+        self._crect.pos = (cx - dp(1), self.y + (self.height - ch) / 2.0)
+        self._crect.size = (dp(2), ch)
+        self._ccol.rgba = self._caret_col if self.focus else (0, 0, 0, 0)
+        self._caret_on = True
+
+    # -- touch: map the tap to a logical cursor position ----------------------
+    def on_touch_down(self, touch):
+        hit = self.collide_point(*touch.pos)
+        res = super().on_touch_down(touch)
+        if hit and self.text:
+            Clock.schedule_once(lambda dt, x=touch.x: self._place_cursor(x), 0)
+        return res
+
+    def _place_cursor(self, touch_x):
+        text = self.text
+        if not text:
+            return
+        base = self._base_rtl(text)
+        pl = self.padding[0] if self.padding else 0
+        tex_w = float(self._trect.size[0]) if self._trect.size[0] else 0.0
+        full_w = self._width(text, base)
+        x_img = self._trect.pos[0] if tex_w else self.x + pl
+        rel = touch_x - x_img + (self._scroll if full_w > self.width - 2 * pl else 0.0)
+        best, best_d = len(text), None
+        for i in range(len(text) + 1):
+            d = abs(self._caret_offset(text, i, base, full_w) - rel)
+            if best_d is None or d < best_d:
+                best, best_d = i, d
+        self.cursor = self.get_cursor_from_index(best)
 
 
 class FormField(BoxLayout):
-    """Caption + input + live Arabic preview (shown while typing Arabic)."""
+    """Caption + input."""
 
     def __init__(self, caption, hint='', text='', multiline=False, height=None, **kw):
         kw.setdefault('size_hint_y', None)
-        super().__init__(orientation='vertical', spacing=dp(5), **kw)
+        super().__init__(orientation='vertical', spacing=dp(6), **kw)
         self.bind(minimum_height=self.setter('height'))
         self.caption = label(caption, size=13, color='sub', bold=True)
-        self.input = ATextInput(hint=hint, text=text, multiline=multiline)
+        self.input = ATextInput(hint=hint, text=text, multiline=False)
         if height:
             self.input.height = height
-        self.preview = ALabel(raw='', font_size=sp(19), color=C('primary'), wrap=True,
-                              autoheight=True, size_hint_y=None, height=0, opacity=0,
-                              padding=[dp(4), dp(2)])
         self.add_widget(self.caption)
         self.add_widget(self.input)
-        self.add_widget(self.preview)
-        self.input.bind(text=self._on_text)
-        self._on_text(self.input, self.input.text)
-
-    def _on_text(self, inst, text):
-        if rtl.has_rtl(text):
-            self.preview.raw = text
-            self.preview.opacity = 1
-            self.preview.size_hint_y = None
-            self.preview.height = max(self.preview.height, dp(28))
-        else:
-            self.preview.raw = ''
-            self.preview.opacity = 0
-            self.preview.height = 0
 
     @property
     def text(self):
         return self.input.text.strip()
 
 
-# ======================================================================
-# Dialog / Toast
-# ======================================================================
 class Dialog(ModalView):
     """Modal card with a title, a body widget and a row of buttons.
 
     buttons = [(text, callback, style), ...]; the dialog closes after each
     button unless the callback returns False.
+
+    The dialog follows the window height, so when the on-screen keyboard
+    opens (Window shrinks, see main.py) the card shrinks too and its body
+    scrolls: the buttons are never hidden behind the keyboard.
     """
 
     def __init__(self, title='', body=None, buttons=(), message='', body_max=None,
@@ -970,25 +1208,30 @@ class Dialog(ModalView):
         super().__init__(size_hint=(None, None), background='',
                          auto_dismiss=dismissable, **kw)
         self.width = min(Window.width * 0.92, dp(420))
+        self._body_max = body_max
+        self._fixed = []                        # card children that are not the scroll view
+        self._sv = None
+        self._body = body
         card = Card(padding=[dp(18), dp(16), dp(18), dp(16)], spacing=dp(12),
-                    size_hint_y=None, radius=dp(22), pos_hint={'x': 0, 'y': 0})
+                    size_hint_y=None, radius=dp(24), pos_hint={'x': 0, 'y': 0})
         card.bind(minimum_height=card.setter('height'))
         if title:
-            card.add_widget(label(title, size=19, bold=True))
+            t = label(title, size=19, bold=True)
+            card.add_widget(t)
+            self._fixed.append(t)
         if message:
-            card.add_widget(label(message, size=15, color='sub'))
+            m = label(message, size=15, color='sub')
+            card.add_widget(m)
+            self._fixed.append(m)
         if body is not None:
-            max_h = body_max or Window.height * 0.58
             sv = ScrollView(size_hint_y=None, do_scroll_x=False, bar_width=dp(3),
-                            bar_color=alpha(C('sub'), 0.5))
+                            bar_color=alpha(C('sub'), 0.4),
+                            bar_inactive_color=alpha(C('sub'), 0.0))
             body.size_hint_y = None
             sv.add_widget(body)
-
-            def fit(*_):
-                sv.height = min(body.height, max_h)
-            body.bind(height=fit)
-            fit()
+            body.bind(height=self._fit)
             card.add_widget(sv)
+            self._sv = sv
         if buttons:
             row = hbox(dp(48), spacing=dp(10))
             btns = []
@@ -999,13 +1242,32 @@ class Dialog(ModalView):
                 btns.append(b)
             add_row(row, btns)
             card.add_widget(row)
+            self._fixed.append(row)
         self.add_widget(card)
         self._card = card
-        card.bind(height=self._fit_height)
-        self._fit_height()
+        card.bind(height=self._fit)
+        for w in self._fixed:
+            w.bind(height=self._fit)
+        Window.bind(size=self._fit)
+        self.bind(on_dismiss=self._unbind_window)
+        self._fit()
 
-    def _fit_height(self, *a):
-        self.height = min(self._card.height, Window.height * 0.94)
+    def _unbind_window(self, *a):
+        Window.unbind(size=self._fit)
+
+    def _fit(self, *a):
+        avail = Window.height * 0.95
+        if self._sv is not None:
+            pad = self._card.padding
+            pad_v = pad[1] + pad[3]
+            n = len(self._card.children)
+            fixed = sum(w.height for w in self._fixed) + pad_v + \
+                self._card.spacing * max(0, n - 1)
+            room = max(dp(90), avail - fixed)
+            cap = self._body_max if self._body_max else room
+            self._sv.height = max(dp(40), min(self._body.height, room, cap))
+            self._sv.bar_width = dp(3) if self._body.height > self._sv.height + 1 else 0
+        self.height = min(self._card.height, avail)
 
     def _pressed(self, cb):
         res = cb() if cb else None

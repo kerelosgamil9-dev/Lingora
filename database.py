@@ -38,7 +38,6 @@ DEFAULT_SETTINGS = {
     'theme': 'auto',            # auto | dark | light
     'lang': 'ar',               # ar | en
     'sound': '1',
-    'arabic_fix': '1',
     'show_dividers': '1',
     'divider_style': 'solid',   # solid | dashed | dotted | fade | ornament
     'divider_width': '1',       # 1 | 2 | 3
@@ -436,6 +435,16 @@ class Database:
             count += 1
             d -= timedelta(days=1)
         return count
+
+    def week_activity(self):
+        """Last 7 days, oldest first: [(date, studied, is_today), ...]."""
+        days = self.study_day_set()
+        today = date.today()
+        out = []
+        for i in range(6, -1, -1):
+            dd = today - timedelta(days=i)
+            out.append((dd, dd.isoformat() in days, i == 0))
+        return out
 
     def best_streak(self):
         days = sorted(self.study_day_set())

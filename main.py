@@ -33,6 +33,7 @@ from kivy.uix.floatlayout import FloatLayout                       # noqa: E402
 from kivy.uix.modalview import ModalView                           # noqa: E402
 from kivy.uix.screenmanager import FadeTransition, ScreenManager   # noqa: E402
 from kivy.uix.widget import Widget                                 # noqa: E402
+from kivy.graphics import Color, RoundedRectangle                  # noqa: E402
 
 
 # ----------------------------------------------------------------------
@@ -72,11 +73,18 @@ from screens import (ChallengesScreen, FolderScreen,   # noqa: E402
                      LevelsScreen, SettingsScreen, folder_game_dialog,
                      source_dialog)
 from services import (SoundFX, Storage, TTS, request_storage_permissions,  # noqa: E402
-                      system_is_dark)
+                      find_asset, set_system_bars, system_is_dark)
 from strings import tr                                             # noqa: E402
-from theme import C, THEME                                         # noqa: E402
+from theme import C, THEME, alpha                                  # noqa: E402
 from widgets import (ALabel, DrawerItem, FlameWidget, NavDrawer, Toast,  # noqa: E402
-                     TopBar, add_row, hbox, spacer)
+                     TopBar, add_row, hbox, logo_image, spacer)
+
+_LOGO = find_asset('logo.png')
+if _LOGO:
+    try:
+        Window.set_icon(_LOGO)              # desktop window icon (Android uses the APK icon)
+    except Exception:                       # noqa: BLE001
+        pass
 
 ROOTS = ('home', 'folders', 'levels', 'challenges', 'settings')
 NAV = [('home', 'home', 'nav_home'),
@@ -113,7 +121,9 @@ class LingoraApp(App):
         self._theme_mode_at_build = None
 
         try:
-            Window.softinput_mode = 'below_target'
+            # the window shrinks above the on-screen keyboard (dialogs and inputs
+            # stay fully visible instead of hiding behind it)
+            Window.softinput_mode = 'resize'
         except Exception:                                           # noqa: BLE001
             pass
         Window.bind(on_keyboard=self.on_key)
@@ -152,7 +162,7 @@ class LingoraApp(App):
         self.lang = db.get('lang') if db.get('lang') in ('ar', 'en') else 'ar'
         strings.set_lang(self.lang)
         rtl.UI_RTL = self.lang == 'ar'
-        rtl.ENABLED = db.get_bool('arabic_fix')
+        rtl.ENABLED = True                  # Arabic shaping / bidi is always on
         pref = db.get('theme')
         if pref == 'auto':
             mode = 'dark' if system_is_dark() else 'light'
@@ -162,6 +172,7 @@ class LingoraApp(App):
         self._theme_mode_at_build = mode
         Window.clearcolor = C('bg')
         self.sfx.enabled = db.get_bool('sound')
+        Clock.schedule_once(lambda dt: set_system_bars(C('topbar'), C('bg'), mode == 'light'), 0.2)
 
     def rebuild(self, goto='home'):
         """Re-create the whole UI (theme / language changed)."""
@@ -214,15 +225,23 @@ class LingoraApp(App):
         p.clear_widgets()
         db = self.db
         streak = db.get_streak()
-        head = hbox(dp(72), spacing=dp(12))
-        flame = FlameWidget(days=streak, size_hint=(None, 1), width=dp(52))
+        head = hbox(dp(64), spacing=dp(12))
         col = BoxLayout(orientation='vertical', spacing=dp(2))
-        col.add_widget(ALabel(raw='Lingora', font_size=sp(26), bold=True, color=C('text'),
+        col.add_widget(ALabel(raw='Lingora', font_size=sp(24), bold=True, color=C('text'),
                               align='left' if not rtl.UI_RTL else 'right'))
-        col.add_widget(ALabel(raw=tr('streak_days', n=streak), font_size=sp(14),
-                              color=C('sub')))
-        add_row(head, [flame, col])
+        col.add_widget(ALabel(raw=tr('tagline'), font_size=sp(12), color=C('sub'),
+                              align='left' if not rtl.UI_RTL else 'right'))
+        add_row(head, [logo_image(dp(56)), col])
         p.add_widget(head)
+        pill = hbox(dp(54), spacing=dp(10), padding=[dp(12), dp(4)])
+        with pill.canvas.before:
+            Color(*alpha(C('accent'), 0.13))
+            pr = RoundedRectangle(pos=pill.pos, size=pill.size, radius=[dp(16)])
+        pill.bind(pos=lambda w, v: setattr(pr, 'pos', v), size=lambda w, v: setattr(pr, 'size', v))
+        flame = FlameWidget(days=streak, size_hint=(None, 1), width=dp(34))
+        add_row(pill, [flame, ALabel(raw=tr('streak_days', n=streak), font_size=sp(15), bold=True,
+                                     color=C('text'))])
+        p.add_widget(pill)
         p.add_widget(spacer(h=dp(10)))
         for name, icon, key in NAV:
             item = DrawerItem(icon, tr(key), active=(name == self.section))

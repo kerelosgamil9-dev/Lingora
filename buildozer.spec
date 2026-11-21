@@ -6,6 +6,13 @@ package.name = lingora
 package.domain = org.lingora
 version = 1.0.0
 
+# ---- icon / splash ------------------------------------------------------------
+icon.filename = %(source.dir)s/icon.png
+icon.adaptive_foreground.filename = %(source.dir)s/icon_fg.png
+icon.adaptive_background.filename = %(source.dir)s/icon_bg.png
+presplash.filename = %(source.dir)s/presplash.png
+presplash.color = #151515
+
 # ---- sources ----------------------------------------------------------------
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,ttf,json,txt
@@ -25,7 +32,7 @@ android.window_softinput_mode = adjustResize
 
 # ---- android -------------------------------------------------------------------------
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-android.api = 33
+android.api = 34
 android.minapi = 21
 android.ndk = 25b
 android.ndk_api = 21

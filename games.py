@@ -375,13 +375,13 @@ class QuizGame(GameBase):
     def _build_choice(self):
         it = self.item
         en_to_ar = self.qtype == 'en_ar'
-        card = auto_card(padding=[dp(16), dp(16)], spacing=dp(10))
+        card = auto_card(padding=[dp(18), dp(24)], spacing=dp(12), radius=dp(24))
         caption = tr('q_pick_ar') if en_to_ar else tr('q_pick_en')
         if it['kind'] == 'sentence':
             caption = tr('q_pick_ar_s') if en_to_ar else tr('q_pick_en_s')
         card.add_widget(label(caption, size=13, color='sub', bold=True, align='center'))
         q_text = it['en'] if en_to_ar else it['ar']
-        size = 30 if it['kind'] == 'word' else 21
+        size = 36 if it['kind'] == 'word' else 22
         card.add_widget(label(q_text, size=size, bold=True, align='center'))
         if en_to_ar:
             row = hbox(dp(46))
@@ -396,11 +396,11 @@ class QuizGame(GameBase):
 
         field = 'ar' if en_to_ar else 'en'
         self.opt_buttons = []
-        col = vbox(spacing=dp(10))
+        col = vbox(spacing=dp(12))
         for text, ok in self.feeder.options(it, field):
             b = RButton(raw=text, bg=C('card'), color=C('text'), wrap=True, autoheight=True,
-                        padding=[dp(14), dp(16)], font_size=sp(18 if it['kind'] == 'word' else 16),
-                        outline=C('border'), radius=dp(16), size_hint_y=None, height=dp(56))
+                        padding=[dp(14), dp(20)], font_size=sp(20 if it['kind'] == 'word' else 17),
+                        outline=C('border'), radius=dp(18), size_hint_y=None, height=dp(64))
             b.is_ok = ok
             b.bind(on_release=self._on_choice)
             self.opt_buttons.append(b)
