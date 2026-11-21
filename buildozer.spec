@@ -16,7 +16,7 @@ source.exclude_patterns = *.pyc, *.db, *.md
 # ---- requirements -------------------------------------------------------------
 # pure Kivy (no KivyMD).  pyjnius + android: Text-to-Speech, permissions, night mode
 # plyer: optional fallback for Text-to-Speech
-requirements = python3,kivy==2.3.0,pyjnius,android,plyer
+requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius,android,plyer
 
 # ---- display ------------------------------------------------------------------------
 orientation = portrait
@@ -31,6 +31,9 @@ android.ndk = 25b
 android.ndk_api = 21
 android.archs = arm64-v8a, armeabi-v7a
 android.accept_sdk_license = True
+
+# pin python-for-android to a release that matches Kivy 2.3.0 / Python 3.11
+p4a.branch = v2024.01.21
 android.allow_backup = True
 android.logcat_filters = *:S python:D
 
