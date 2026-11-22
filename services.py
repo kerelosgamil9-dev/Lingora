@@ -151,7 +151,8 @@ def install_keyboard_probe(on_fail):
             state['last'] = None
             _log('request_keyboard (%s)' % type(target).__name__)
             kb = orig_request(callback, target, input_type, keyboard_suggestions)
-            Clock.schedule_once(lambda dt: _force_ime(), 0.1)
+            # NOTE: never move focus away from SDL's own text view here, or the
+            # keyboard shows but typed characters never reach the app.
             return kb
 
         def check(dt):

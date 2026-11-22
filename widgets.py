@@ -1677,8 +1677,14 @@ class Dialog(ModalView):
         if not self._is_open:
             return
         if self._top_mode():
-            self.center_x = self._window.width / 2.0
-            self.top = self._window.height - dp(26)
+            # centre the card in the part of the screen the keyboard will leave free
+            H = self._window.height
+            kb = H * 0.42
+            x = (self._window.width - self.width) / 2.0
+            y = kb + (H - kb - self.height) / 2.0
+            y = min(y, H - dp(26) - self.height)
+            if abs(self.x - x) > 0.5 or abs(self.y - y) > 0.5:
+                self.pos = (x, y)
         else:
             self.center = self._window.center
 
