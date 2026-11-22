@@ -1357,7 +1357,7 @@ class ATextInput(TextInput):
             self._crect = Rectangle(size=(0, 0))
         self._blink = Clock.schedule_interval(self._toggle_caret, 0.53)
         self._trig = Clock.create_trigger(self._redraw, -1)
-        self.bind(pos=self._upd, size=self._upd, focus=self._on_focus,
+        self.bind(pos=self._upd, size=self._upd, focus=self._lg_focus,
                   text=self._trig, cursor=self._trig, font_size=self._trig,
                   font_name=self._trig, halign=self._trig, padding=self._trig)
         self._upd()
@@ -1390,7 +1390,7 @@ class ATextInput(TextInput):
         self._apply_kb_mode()
         self.focus = True
 
-    def _on_focus(self, *a):
+    def _lg_focus(self, *a):
         self._caret_on = True
         self._upd()
         if VK['mode'] == 'inapp':
