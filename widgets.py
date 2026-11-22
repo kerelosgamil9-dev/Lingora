@@ -37,8 +37,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
 import rtl
-from services import find_asset
-from theme import C, alpha, mix
+from services import find_asset, native_prompt, ANDROID
+from theme import C, THEME, alpha, mix
 
 
 # ======================================================================
@@ -1014,6 +1014,12 @@ class FlameWidget(Widget):
 # ======================================================================
 # Text inputs
 # ======================================================================
+# On Android typing goes through the phone's own text dialog (see services.native_prompt):
+# Kivy's keyboard support is unreliable on some devices.  main.py switches this from
+# the 'native_input' setting.
+NATIVE_INPUT = {'on': ANDROID}
+
+
 class ATextInput(TextInput):
     """Rounded single-line text input that shows Arabic correctly *while typing*.
 
@@ -1207,8 +1213,27 @@ class ATextInput(TextInput):
         self._caret_on = True
 
     # -- touch: map the tap to a logical cursor position ----------------------
+    def open_native(self):
+        """Open the system text dialog for this field; False if unavailable."""
+        if not (NATIVE_INPUT['on'] and ANDROID) or self.disabled:
+            return False
+        from strings import tr
+        title = getattr(self, 'native_title', '') or self._hint_raw or ''
+        return native_prompt(title, self._hint_raw, self.text, tr('save'), tr('cancel'),
+                             THEME.is_dark(),
+                             self._native_done)
+
+    def _native_done(self, value):
+        self.text = value
+        self.cursor = self.get_cursor_from_index(len(value))
+        if value.strip():
+            self.dispatch('on_text_validate')
+
     def on_touch_down(self, touch):
         hit = self.collide_point(*touch.pos)
+        if hit and NATIVE_INPUT['on'] and ANDROID and not self.disabled:
+            if self.open_native():
+                return True
         res = super().on_touch_down(touch)
         if hit and self.text:
             Clock.schedule_once(lambda dt, x=touch.x: self._place_cursor(x), 0)
@@ -1241,6 +1266,7 @@ class FormField(BoxLayout):
         self.bind(minimum_height=self.setter('height'))
         self.caption = label(caption, size=13, color='sub', bold=True)
         self.input = ATextInput(hint=hint, text=text, multiline=False)
+        self.input.native_title = caption
         if height:
             self.input.height = height
         self.add_widget(self.caption)

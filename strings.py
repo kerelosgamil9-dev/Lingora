@@ -242,6 +242,8 @@ STR = {
     's_learning': {'ar': 'التعلم', 'en': 'LEARNING'},
     's_goal': {'ar': 'هدف اليوم (عدد الإجابات)', 'en': 'Daily goal (answers)'},
     's_round': {'ar': 'عدد الأسئلة في الجولة', 'en': 'Questions per round'},
+    's_native_input': {'ar': 'نافذة الكتابة الخاصة بالهاتف', 'en': "Use the phone's typing window"},
+    's_native_input_d': {'ar': 'تضمن ظهور الكيبورد وتجعل العربي متصلاً أثناء الكتابة.', 'en': 'Makes sure the keyboard always opens and Arabic letters join while typing.'},
     's_unlock_all': {'ar': 'فتح كل المستويات', 'en': 'Unlock all levels'},
     's_unlock_all_d': {'ar': 'تجاوز شرط النجاح في الاختبارات', 'en': 'Skip the pass-the-test requirement'},
     's_backup': {'ar': 'النسخ الاحتياطي', 'en': 'BACKUP'},

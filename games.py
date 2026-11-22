@@ -457,7 +457,7 @@ class QuizGame(GameBase):
         self.btn_check = button(tr('check'), self._check_spell, style='primary')
         add_row(row2, [self.btn_hint, self.btn_check])
         self.body.add_widget(row2)
-        self.later(lambda: setattr(self.spell_input, 'focus', True), 0.3)
+        self.later(self._open_input, 0.35)
         if self.app.db.get_bool('auto_speak'):
             self.later(lambda: self.app.speak(it['en'], quiet=True), 0.35)
 
@@ -484,6 +484,10 @@ class QuizGame(GameBase):
         if self.hints < letters - 1:
             self.hints += 1
             self._update_pattern()
+
+    def _open_input(self):
+        if not self.spell_input.open_native():
+            self.spell_input.focus = True
 
     def _check_spell(self):
         if self.locked or self.finished:

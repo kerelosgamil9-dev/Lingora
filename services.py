@@ -148,6 +148,94 @@ def harden_keyboard():
         pass
 
 
+# ------------------------------------------------------- native text prompt
+_NATIVE_KEEP = []          # keeps the Java callback objects alive
+_native_busy = {'v': False}
+
+
+def native_prompt(title, hint, text, ok_label, cancel_label, dark, on_result):
+    """Android's own text-entry dialog (EditText + system keyboard).
+
+    It lives outside the Kivy/SDL surface, so the keyboard always opens, Arabic
+    letters join correctly and the phone's keyboard languages work.
+    on_result(text) is called on Kivy's thread when the user confirms.
+    Returns False when it cannot be used (then the caller uses Kivy's own input)."""
+    if not ANDROID or _native_busy['v']:
+        return False
+    try:
+        from android.runnable import run_on_ui_thread
+        from jnius import PythonJavaClass, autoclass, java_method
+        from kivy.clock import Clock
+        activity = get_activity()
+        if activity is None:
+            return False
+        Builder = autoclass('android.app.AlertDialog$Builder')
+        EditText = autoclass('android.widget.EditText')
+        InputType = autoclass('android.text.InputType')
+        String = autoclass('java.lang.String')
+
+        class _Click(PythonJavaClass):
+            __javainterfaces__ = ['android/content/DialogInterface$OnClickListener']
+            __javacontext__ = 'app'
+
+            def __init__(self, cb):
+                super().__init__()
+                self.cb = cb
+
+            @java_method('(Landroid/content/DialogInterface;I)V')
+            def onClick(self, dialog, which):
+                self.cb()
+
+        class _Dismiss(PythonJavaClass):
+            __javainterfaces__ = ['android/content/DialogInterface$OnDismissListener']
+            __javacontext__ = 'app'
+
+            @java_method('(Landroid/content/DialogInterface;)V')
+            def onDismiss(self, dialog):
+                _native_busy['v'] = False
+
+        holder = {}
+        _native_busy['v'] = True
+
+        def _ok():
+            try:
+                value = str(holder['et'].getText().toString())
+            except Exception:                                   # noqa: BLE001
+                return
+            Clock.schedule_once(lambda dt: on_result(value), 0)
+
+        ok_l, no_l, dis_l = _Click(_ok), _Click(lambda: None), _Dismiss()
+        _NATIVE_KEEP[:] = [ok_l, no_l, dis_l]
+
+        @run_on_ui_thread
+        def _show():
+            try:
+                builder = Builder(activity, 4 if dark else 5)   # DEVICE_DEFAULT_DARK / LIGHT
+                et = EditText(activity)
+                et.setSingleLine(True)
+                et.setInputType(InputType.TYPE_CLASS_TEXT)
+                et.setHint(String(hint or ''))
+                et.setText(String(text or ''))
+                et.setSelection(len(text or ''))
+                holder['et'] = et
+                builder.setTitle(String(title or ''))
+                builder.setView(et)
+                builder.setPositiveButton(String(ok_label), ok_l)
+                builder.setNegativeButton(String(cancel_label), no_l)
+                dlg = builder.create()
+                dlg.setOnDismissListener(dis_l)
+                dlg.getWindow().setSoftInputMode(4)             # SOFT_INPUT_STATE_VISIBLE
+                dlg.show()
+                et.requestFocus()
+            except Exception:                                   # noqa: BLE001
+                _native_busy['v'] = False
+        _show()
+        return True
+    except Exception:                                           # noqa: BLE001
+        _native_busy['v'] = False
+        return False
+
+
 # ---------------------------------------------------------------- activity
 def get_activity():
     """Return the current Android Activity (or None)."""

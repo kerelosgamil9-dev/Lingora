@@ -76,6 +76,7 @@ from services import (SoundFX, Storage, TTS, request_storage_permissions,  # noq
                       find_asset, harden_keyboard, set_system_bars, system_is_dark)
 from strings import tr                                             # noqa: E402
 from theme import C, THEME, alpha                                  # noqa: E402
+import widgets as widgets_mod                                      # noqa: E402
 from widgets import (ALabel, DrawerItem, FlameWidget, NavDrawer, Toast,  # noqa: E402
                      TopBar, add_row, hbox, logo_image, spacer)
 
@@ -121,6 +122,7 @@ class LingoraApp(App):
         self._theme_mode_at_build = None
 
         harden_keyboard()
+        widgets_mod.NATIVE_INPUT['on'] = self.db.get_bool('native_input')
         Window.bind(on_keyboard=self.on_key)
 
         self.root_widget = FloatLayout()

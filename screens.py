@@ -30,6 +30,7 @@ import rtl
 from database import PASS_SCORE
 from strings import tr
 from theme import C, FOLDER_COLORS, HIGHLIGHTS, alpha
+import widgets as widgets_mod                                      # noqa: E402
 from widgets import (TintButton, ALabel, ATextInput, BarProgress, Card, ColorDots, Dialog, Divider,
                      FlameWidget, FormField, Icon, IconButton, RButton, Segmented, TapCard,
                      Toast, Toggle, WeekStrip, add_row, auto_card, button, confirm, hbox, label,
@@ -1099,6 +1100,8 @@ class SettingsScreen(BaseScreen):
         c.add_widget(Segmented([(str(n), str(n)) for n in (5, 10, 15, 20)],
                                str(db.get_int('round_size', 10)),
                                on_change=lambda v: db.set('round_size', v)))
+        c.add_widget(switch_row(tr('s_native_input'), db.get_bool('native_input'),
+                                self._set_native, sub=tr('s_native_input_d')))
         c.add_widget(switch_row(tr('s_unlock_all'), db.get_bool('unlock_all'),
                                 lambda v: db.set('unlock_all', '1' if v else '0'),
                                 sub=tr('s_unlock_all_d')))
@@ -1140,6 +1143,10 @@ class SettingsScreen(BaseScreen):
         self.app.sfx.enabled = bool(v)
         if v:
             self.app.sfx.play('correct')
+
+    def _set_native(self, v):
+        self.app.db.set('native_input', '1' if v else '0')
+        widgets_mod.NATIVE_INPUT['on'] = bool(v)
 
     def _set_div(self, key, value):
         self.app.db.set(key, value)
