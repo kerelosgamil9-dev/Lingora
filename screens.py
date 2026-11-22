@@ -1100,8 +1100,12 @@ class SettingsScreen(BaseScreen):
         c.add_widget(Segmented([(str(n), str(n)) for n in (5, 10, 15, 20)],
                                str(db.get_int('round_size', 10)),
                                on_change=lambda v: db.set('round_size', v)))
-        c.add_widget(switch_row(tr('s_inapp_kb'), db.get_bool('inapp_keyboard'),
-                                self._set_inapp_kb, sub=tr('s_inapp_kb_d')))
+        c.add_widget(label(tr('s_kb_mode'), size=15, bold=True))
+        c.add_widget(Segmented([('auto', tr('kb_auto')), ('inapp', tr('kb_inapp')),
+                                ('phone', tr('kb_phone'))],
+                               db.get('kb_mode') or 'auto', on_change=self._set_kb_mode))
+        c.add_widget(label(tr('s_kb_mode_d'), size=13, color='sub'))
+        c.add_widget(button(tr('kb_diag'), self._kb_diag, style='soft', height=dp(44)))
         c.add_widget(switch_row(tr('s_unlock_all'), db.get_bool('unlock_all'),
                                 lambda v: db.set('unlock_all', '1' if v else '0'),
                                 sub=tr('s_unlock_all_d')))
@@ -1144,9 +1148,16 @@ class SettingsScreen(BaseScreen):
         if v:
             self.app.sfx.play('correct')
 
-    def _set_inapp_kb(self, v):
-        self.app.db.set('inapp_keyboard', '1' if v else '0')
-        widgets_mod.VK['on'] = bool(v)
+    def _set_kb_mode(self, v):
+        self.app.db.set('kb_mode', v)
+        widgets_mod.VK['mode'] = v
+
+    def _kb_diag(self):
+        from services import keyboard_diagnostics
+        body = vbox(spacing=dp(2))
+        for ln in keyboard_diagnostics():
+            body.add_widget(label(ln, size=12, color='sub'))
+        Dialog(title=tr('kb_diag'), body=body, buttons=[(tr('close'), None, 'primary')]).open()
 
     def _set_div(self, key, value):
         self.app.db.set(key, value)

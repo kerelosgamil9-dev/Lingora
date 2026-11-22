@@ -1019,7 +1019,7 @@ class FlameWidget(Widget):
 # ======================================================================
 # Android's own keyboard fails to open on some phones when requested from a Kivy
 # app, so typing uses this keyboard by default (Settings -> in-app keyboard).
-VK = {'on': True}
+VK = {'mode': 'auto'}      # auto | inapp | phone
 _VK_STATE = {'uid': None, 'widget': None}
 
 _KB_EN = [list('qwertyuiop'), list('asdfghjkl'), ['SHIFT'] + list('zxcvbnm') + ['BACK']]
@@ -1283,6 +1283,15 @@ def vk_show(target):
     _get_vk().show(target)
 
 
+def vk_fallback(target):
+    """Phone keyboard did not appear: show the in-app one (mode 'auto' only)."""
+    if VK['mode'] != 'auto' or not isinstance(target, ATextInput) or not target.focus:
+        return False
+    target.keyboard_mode = 'managed'
+    vk_show(target)
+    return True
+
+
 def vk_release(widget):
     if _VK_STATE['widget'] is not None:
         _VK_STATE['widget'].release(widget)
@@ -1374,7 +1383,7 @@ class ATextInput(TextInput):
 
     def _apply_kb_mode(self):
         # with the in-app keyboard Kivy must not ask Android for its own keyboard
-        self.keyboard_mode = 'managed' if VK['on'] else 'auto'
+        self.keyboard_mode = 'managed' if VK['mode'] == 'inapp' else 'auto'
 
     def focus_input(self):
         """Give the field focus (and show the keyboard) from code."""
@@ -1384,7 +1393,7 @@ class ATextInput(TextInput):
     def _on_focus(self, *a):
         self._caret_on = True
         self._upd()
-        if VK['on']:
+        if VK['mode'] == 'inapp':
             if self.focus:
                 vk_show(self)
             else:

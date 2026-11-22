@@ -73,7 +73,7 @@ from screens import (ChallengesScreen, FolderScreen,   # noqa: E402
                      LevelsScreen, SettingsScreen, folder_game_dialog,
                      source_dialog)
 from services import (SoundFX, Storage, TTS, request_storage_permissions,  # noqa: E402
-                      find_asset, set_system_bars, system_is_dark)
+                      find_asset, install_keyboard_probe, set_system_bars, system_is_dark)
 from strings import tr                                             # noqa: E402
 from theme import C, THEME, alpha                                  # noqa: E402
 import widgets as widgets_mod                                      # noqa: E402
@@ -121,7 +121,8 @@ class LingoraApp(App):
         self._tts_warned = False
         self._theme_mode_at_build = None
 
-        widgets_mod.VK['on'] = self.db.get_bool('inapp_keyboard')
+        widgets_mod.VK['mode'] = self.db.get('kb_mode') or 'auto'
+        install_keyboard_probe(widgets_mod.vk_fallback)
         Window.bind(on_keyboard=self.on_key)
 
         self.root_widget = FloatLayout()

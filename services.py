@@ -78,6 +78,129 @@ def set_system_bars(status_rgb, nav_rgb, light_icons):
         return False
 
 
+# ---------------------------------------------------------------- keyboard
+def _force_ime():
+    """Ask Android directly to show the soft keyboard for the SDL view."""
+    try:
+        from android.runnable import run_on_ui_thread
+        from jnius import autoclass
+        activity = get_activity()
+        if activity is None:
+            return
+        Context = autoclass('android.content.Context')
+        try:
+            view = autoclass('org.libsdl.app.SDLActivity').mSurface
+        except Exception:                                   # noqa: BLE001
+            view = None
+
+        @run_on_ui_thread
+        def _go():
+            try:
+                imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
+                v = view or activity.getWindow().getDecorView()
+                v.requestFocus()
+                imm.showSoftInput(v, 0)
+            except Exception:                               # noqa: BLE001
+                pass
+        _go()
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
+def install_keyboard_probe(on_fail):
+    """Android only.  Kivy drops the keyboard 0.2 s after asking for it when the phone
+    has not drawn it yet.  Here the phone's keyboard gets ~1.2 s; if it still is not
+    on screen, on_fail(field) is called (the app then shows its own keyboard).
+    Returns nothing; harmless elsewhere."""
+    if not ANDROID:
+        return
+    try:
+        from kivy.clock import Clock
+        from kivy.core.window import Window
+        orig_request = Window.request_keyboard
+        state = {'t0': 0.0, 'seen': False}
+
+        def request(callback, target, input_type='text', keyboard_suggestions=True):
+            state['t0'] = time.time()
+            state['seen'] = False
+            kb = orig_request(callback, target, input_type, keyboard_suggestions)
+            Clock.schedule_once(lambda dt: _force_ime(), 0.1)
+            return kb
+
+        def check(dt):
+            kb = getattr(Window, '_sdl_keyboard', None)
+            if kb is None:
+                return False
+            try:
+                shown = Window._win.is_keyboard_shown()
+            except Exception:                               # noqa: BLE001
+                shown = False
+            if shown:
+                state['seen'] = True
+                return None
+            if state['seen']:                               # the user closed it
+                kb.release()
+                return False
+            age = time.time() - state['t0']
+            if age > 1.2:
+                try:
+                    if on_fail(kb.target):
+                        return False
+                except Exception:                           # noqa: BLE001
+                    pass
+                if age > 4.0:
+                    kb.release()
+                    return False
+            return None
+
+        Window.request_keyboard = request
+        Window._check_keyboard_shown = check
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
+def keyboard_diagnostics():
+    """Human-readable facts about the phone's keyboard state (for troubleshooting)."""
+    lines = ['android: %s' % ANDROID]
+    if not ANDROID:
+        return lines
+    try:
+        from jnius import autoclass
+        activity = get_activity()
+        Build = autoclass('android.os.Build$VERSION')
+        Context = autoclass('android.content.Context')
+        lines.append('sdk: %s' % Build.SDK_INT)
+        try:
+            lines.append('target sdk: %s' % activity.getApplicationInfo().targetSdkVersion)
+        except Exception as e:                              # noqa: BLE001
+            lines.append('target sdk: ? %s' % e)
+        try:
+            lines.append('window focus: %s' % activity.hasWindowFocus())
+        except Exception as e:                              # noqa: BLE001
+            lines.append('window focus: ? %s' % e)
+        try:
+            imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
+            lines.append('imm active: %s' % imm.isActive())
+            lines.append('imm accepting text: %s' % imm.isAcceptingText())
+            names = [str(i.getPackageName()) for i in imm.getEnabledInputMethodList().toArray()]
+            lines.append('keyboards: %s' % ', '.join(names))
+        except Exception as e:                              # noqa: BLE001
+            lines.append('imm: ? %s' % e)
+        try:
+            sdl = autoclass('org.libsdl.app.SDLActivity')
+            lines.append('SDL text view: %s' % (sdl.mTextEdit is not None))
+        except Exception as e:                              # noqa: BLE001
+            lines.append('SDL: ? %s' % e)
+        try:
+            from kivy.core.window import Window
+            lines.append('kivy keyboard shown: %s' % Window._win.is_keyboard_shown())
+        except Exception as e:                              # noqa: BLE001
+            lines.append('kivy: ? %s' % e)
+    except Exception as e:                                  # noqa: BLE001
+        lines.append('error: %s' % e)
+    return lines
+
+
 # ---------------------------------------------------------------- activity
 def get_activity():
     """Return the current Android Activity (or None)."""
