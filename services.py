@@ -78,6 +78,76 @@ def set_system_bars(status_rgb, nav_rgb, light_icons):
         return False
 
 
+# ---------------------------------------------------------------- keyboard
+def _force_ime():
+    """Ask Android directly to show the soft keyboard for the SDL view."""
+    try:
+        from android.runnable import run_on_ui_thread
+        from jnius import autoclass
+        activity = get_activity()
+        if activity is None:
+            return
+        Context = autoclass('android.content.Context')
+        try:
+            view = autoclass('org.libsdl.app.SDLActivity').mSurface
+        except Exception:                                   # noqa: BLE001
+            view = None
+
+        @run_on_ui_thread
+        def _go():
+            try:
+                imm = activity.getSystemService(Context.INPUT_METHOD_SERVICE)
+                v = view or activity.getWindow().getDecorView()
+                v.requestFocus()
+                imm.showSoftInput(v, 0)
+            except Exception:                               # noqa: BLE001
+                pass
+        _go()
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
+def harden_keyboard():
+    """Make the on-screen keyboard reliable on Android.
+
+    Kivy releases the keyboard 0.2 s after asking for it if Android has not drawn
+    it yet - on slow/new devices that means it never appears.  Here the release
+    check waits several seconds and the keyboard is also requested straight from
+    Android.  No-op on desktop."""
+    if not ANDROID:
+        return
+    try:
+        from kivy.clock import Clock
+        from kivy.core.window import Window
+        orig_request = Window.request_keyboard
+        state = {'t0': 0.0, 'seen': False}
+
+        def request(callback, target, input_type='text', keyboard_suggestions=True):
+            state['t0'] = time.time()
+            state['seen'] = False
+            kb = orig_request(callback, target, input_type, keyboard_suggestions)
+            Clock.schedule_once(lambda dt: _force_ime(), 0.12)
+            Clock.schedule_once(lambda dt: _force_ime(), 0.6)
+            return kb
+
+        def check(dt):
+            if getattr(Window, '_sdl_keyboard', None) is None:
+                return False
+            shown = Window._win.is_keyboard_shown()
+            if shown:
+                state['seen'] = True
+                return None
+            if state['seen'] or time.time() - state['t0'] > 4.0:
+                Window._sdl_keyboard.release()
+                return False
+            return None
+
+        Window.request_keyboard = request
+        Window._check_keyboard_shown = check
+    except Exception:                                       # noqa: BLE001
+        pass
+
+
 # ---------------------------------------------------------------- activity
 def get_activity():
     """Return the current Android Activity (or None)."""

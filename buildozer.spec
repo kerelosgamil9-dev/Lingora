@@ -29,7 +29,7 @@ requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,pyjnius,android,p
 # ---- display ------------------------------------------------------------------------
 orientation = portrait
 fullscreen = 0
-android.window_softinput_mode = adjustResize
+android.window_softinput_mode = adjustNothing
 
 # ---- android -------------------------------------------------------------------------
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
