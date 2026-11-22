@@ -69,7 +69,7 @@ import rtl                                                         # noqa: E402
 import strings                                                     # noqa: E402
 from database import Database                                      # noqa: E402
 from screens import (ChallengesScreen, FolderScreen,   # noqa: E402
-                     FoldersScreen, GameScreen, HomeScreen, LevelSheet,
+                     FoldersScreen, GameScreen, HomeScreen, level_cfg,
                      LevelsScreen, SettingsScreen, folder_game_dialog,
                      source_dialog)
 from services import (SoundFX, Storage, TTS, request_storage_permissions,  # noqa: E402
@@ -120,12 +120,6 @@ class LingoraApp(App):
         self._tts_warned = False
         self._theme_mode_at_build = None
 
-        try:
-            # the window shrinks above the on-screen keyboard (dialogs and inputs
-            # stay fully visible instead of hiding behind it)
-            Window.softinput_mode = 'resize'
-        except Exception:                                           # noqa: BLE001
-            pass
         Window.bind(on_keyboard=self.on_key)
 
         self.root_widget = FloatLayout()
@@ -217,8 +211,10 @@ class LingoraApp(App):
         self.refresh_drawer()
 
     def apply_topbar(self, screen):
-        title, mode, actions = screen.topbar_spec()
-        self.topbar.set(title, mode, actions)
+        spec = screen.topbar_spec()
+        title, mode, actions = spec[:3]
+        extra = spec[3] if len(spec) > 3 else {}
+        self.topbar.set(title, mode, actions, **extra)
 
     def refresh_drawer(self):
         p = self.drawer.panel
@@ -307,7 +303,7 @@ class LingoraApp(App):
         self.go('folder', push=True)
 
     def open_level(self, n):
-        LevelSheet(self, n).open()
+        self.start_game(level_cfg(n))
 
     def start_game(self, cfg):
         self.game_cfg = dict(cfg)

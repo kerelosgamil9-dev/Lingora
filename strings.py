@@ -116,19 +116,31 @@ STR = {
     'hl_example': {'ar': 'الجملة التوضيحية', 'en': 'Example'},
 
     # ---- levels ---------------------------------------------------------------------
-    'levels_intro': {'ar': 'مستويات متدرجة من الصفر. انجح في اختبار المستوى بنسبة {p}% أو أكثر لتفتح المستوى التالي.', 'en': 'Progressive levels from zero. Score {p}% or more in a level test to unlock the next level.'},
+    'levels_intro': {'ar': 'اضغط على أي مستوى مفتوح وسيسألك عن كلماته بشكل عشوائي وبكل أنواع الأسئلة. انجح بنسبة {p}% أو أكثر لتفتح المستوى التالي.', 'en': 'Tap an open level and it quizzes you on its words in random order, with every question type. Score {p}% or more to unlock the next level.'},
     'level_n': {'ar': 'المستوى {n}', 'en': 'Level {n}'},
     'level_short': {'ar': 'م{n}', 'en': 'Lv {n}'},
     'level_progress': {'ar': 'المتقن {a} / {b}', 'en': 'Mastered {a} / {b}'},
     'best_score': {'ar': 'أفضل نتيجة: {n}%', 'en': 'Best score: {n}%'},
-    'level_locked': {'ar': 'انجح في المستوى {n} بنسبة {p}% لفتح هذا المستوى', 'en': 'Pass level {n} with {p}% to unlock this one'},
+    'level_locked': {'ar': 'انجح في «{n}» بنسبة {p}% لفتح هذا المستوى', 'en': 'Pass “{n}” with {p}% to unlock this level'},
     'take_test': {'ar': 'اختبار المستوى (النجاح {p}%)', 'en': 'Take level test (pass {p}%)'},
     'level_words': {'ar': 'عرض كلمات المستوى', 'en': 'View level words'},
     'copy_level': {'ar': 'إضافة المستوى إلى مجلداتي', 'en': 'Add this level to my folders'},
     'level_copied': {'ar': 'تمت إضافة المستوى كمجلد جديد', 'en': 'Level added as a new folder'},
-    'test_passed': {'ar': 'نجحت في اختبار المستوى {n}!', 'en': 'You passed the level {n} test!'},
+    'test_passed': {'ar': 'نجحت في المستوى {n}!', 'en': 'You passed level {n}!'},
     'test_failed': {'ar': 'لم تصل إلى {p}% بعد. حاول مرة أخرى!', 'en': 'You did not reach {p}% yet. Try again!'},
-    'level_unlocked': {'ar': 'تم فتح المستوى {n}!', 'en': 'Level {n} unlocked!'},
+    'level_unlocked': {'ar': 'تم فتح مستوى «{n}»!', 'en': '“{n}” unlocked!'},
+
+    'track_main': {'ar': 'المسار الأساسي', 'en': 'Main track'},
+
+    'track_main_d': {'ar': '٢٤ مستوى متدرجاً ثم مراجعة شاملة.', 'en': '24 step-by-step levels, then a full review.'},
+
+    'track_extra': {'ar': 'مسار المبتدئين من الصفر', 'en': 'Absolute beginner track'},
+
+    'track_extra_d': {'ar': 'كلمات الحياة اليومية لمن يبدأ من الصفر: التحيات، الطعام، الأفعال، الأماكن وغيرها.', 'en': 'Everyday words for someone starting from zero: greetings, food, verbs, places and more.'},
+
+    'start_level': {'ar': 'ابدأ المستوى', 'en': 'Start level'},
+
+    'copy_level_short': {'ar': 'إضافة لمجلداتي', 'en': 'Add to my folders'},
 
     # ---- challenges / modes --------------------------------------------------------
     'challenges_intro': {'ar': 'اختر تحدياً، ثم العب بكلمات النظام الجاهزة (تصعب تدريجياً) أو بكلماتك أنت.', 'en': 'Pick a challenge, then play with the built-in words (they get harder step by step) or with your own words.'},

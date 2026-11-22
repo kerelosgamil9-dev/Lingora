@@ -12,6 +12,7 @@ icon.adaptive_foreground.filename = %(source.dir)s/icon_fg.png
 icon.adaptive_background.filename = %(source.dir)s/icon_bg.png
 presplash.filename = %(source.dir)s/presplash.png
 presplash.color = #151515
+android.presplash_color = #151515
 
 # ---- sources ----------------------------------------------------------------
 source.dir = .

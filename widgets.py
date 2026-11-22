@@ -216,6 +216,17 @@ class ALabel(Label):
                 radius=[dp(5)]))
 
 
+def centered(widget, size):
+    """Wrap a fixed-size widget so it stays vertically centred in a row."""
+    box = BoxLayout(orientation='vertical', size_hint=(None, 1), width=size[0])
+    box.add_widget(Widget())
+    widget.size_hint = (None, None)
+    widget.size = size
+    box.add_widget(widget)
+    box.add_widget(Widget())
+    return box
+
+
 def logo_image(size):
     """The Lingora logo as a fixed-size image (falls back to an empty spacer)."""
     path = find_asset('logo.png')
@@ -240,6 +251,14 @@ def _star_points(cx, cy, ro, ri):
 _SPEAKER = [('R', .14, .38, .16, .24),
             ('F', [.30, .38, .52, .20, .52, .80, .30, .62])]
 
+def _u(*pts):
+    """svg-style points (24x24, y down) -> unit square (y up), flat list."""
+    out = []
+    for x, y in pts:
+        out += [round(x / 24.0, 4), round(1 - y / 24.0, 4)]
+    return out
+
+
 ICONS = {
     'menu': [('L', [.15, .28, .85, .28]), ('L', [.15, .50, .85, .50]),
              ('L', [.15, .72, .85, .72])],
@@ -250,12 +269,15 @@ ICONS = {
     'check': [('L', [.20, .52, .42, .30, .80, .72])],
     'speaker': _SPEAKER + [('A', .50, .50, .20, 45, 135), ('A', .50, .50, .34, 45, 135)],
     'mute': _SPEAKER + [('L', [.64, .36, .88, .64]), ('L', [.64, .64, .88, .36])],
-    'edit': [('LC', [.27, .39, .73, .85, .85, .73, .39, .27]),
-             ('T', .27, .39, .39, .27, .13, .13),
-             ('L', [.60, .72, .72, .60])],
-    'trash': [('L', [.20, .76, .80, .76]), ('L', [.40, .76, .40, .86, .60, .86, .60, .76]),
-              ('L', [.28, .70, .32, .15, .68, .15, .72, .70]),
-              ('L', [.45, .60, .45, .28]), ('L', [.55, .60, .55, .28])],
+    'edit': [('LC', _u((16.5, 3.5), (18, 2.88), (19.5, 3.5), (20.12, 5), (19.5, 6.5),
+                       (7, 19), (3, 20), (4, 16))),
+             ('L', _u((12.5, 21), (21, 21)))],
+    'trash': [('L', _u((3, 6), (21, 6))),
+              ('L', _u((5, 6), (6, 19.2), (6.6, 21), (8, 22), (16, 22), (17.4, 21),
+                       (18, 19.2), (19, 6))),
+              ('L', _u((8, 6), (8, 4), (8.6, 2.6), (10, 2), (14, 2), (15.4, 2.6), (16, 4),
+                       (16, 6))),
+              ('L', _u((10, 11), (10, 17))), ('L', _u((14, 11), (14, 17)))],
     'star': [('STAR',)],
     'marker': [('F', [.28, .38, .62, .72, .80, .54, .46, .20]),
                ('T', .28, .38, .46, .20, .16, .16), ('L', [.12, .08, .56, .08])],
@@ -394,6 +416,39 @@ class IconButton(ButtonBehavior, Icon):
 
     def _on_state(self, *a):
         self._ov_draw()
+
+
+class TintButton(ButtonBehavior, Widget):
+    """Small rounded square with a tinted background and a vector icon inside
+    (used for edit / delete on cards)."""
+
+    def __init__(self, name, color, box=dp(40), **kw):
+        kw.setdefault('size_hint', (None, None))
+        kw.setdefault('size', (box, box))
+        super().__init__(**kw)
+        self._tint = color
+        with self.canvas.before:
+            self._bgc = Color(color[0], color[1], color[2], 0.15)
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(13)])
+            self._lnc = Color(color[0], color[1], color[2], 0.30)
+            self._ln = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(13)),
+                            width=1)
+        self.icon = Icon(name=name, color=color, lw=dp(1.8), size_hint=(None, None))
+        self.add_widget(self.icon)
+        self.bind(pos=self._upd, size=self._upd, state=self._state)
+        self._upd()
+
+    def _upd(self, *a):
+        self._bg.pos = self.pos
+        self._bg.size = self.size
+        self._ln.rounded_rectangle = (self.x, self.y, self.width, self.height, dp(13))
+        side = min(self.width, self.height) * 0.54
+        self.icon.size = (side, side)
+        self.icon.center = self.center
+
+    def _state(self, *a):
+        a_bg = 0.30 if self.state == 'down' else 0.15
+        self._bgc.rgba = (self._tint[0], self._tint[1], self._tint[2], a_bg)
 
 
 # ======================================================================
@@ -899,12 +954,30 @@ def _catmull(points, seg=8):
 _FLAME_OUTLINE = _catmull(_FLAME_CTRL)
 
 
+_FLAME_TEX = {}
+
+
+def _flame_texture(name):
+    if name not in _FLAME_TEX:
+        tex = None
+        path = find_asset(name)
+        if path:
+            try:
+                from kivy.core.image import Image as CoreImage
+                tex = CoreImage(path, mipmap=True).texture
+                tex.mag_filter = 'linear'
+                tex.min_filter = 'linear_mipmap_linear'
+            except Exception:                               # noqa: BLE001
+                tex = None
+        _FLAME_TEX[name] = tex
+    return _FLAME_TEX[name]
+
+
 class FlameWidget(Widget):
-    """Fire icon: nested flame shapes interpolated from the outer colour to the
-    glowing core give a real gradient. Colour depends on the streak days."""
+    """Fire icon built from three tinted layers (body, glowing tip, hot core) so the
+    flame shows a real gradient.  The colours follow the streak length."""
 
     days = NumericProperty(0)
-    layers = 8
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -917,45 +990,25 @@ class FlameWidget(Widget):
         s = min(self.width, self.height)
         if s <= 2:
             return
-        ox = self.center_x - s / 2.0
-        oy = self.center_y - s / 2.0
+        pos = (self.center_x - s / 2.0, self.center_y - s / 2.0)
         outer, core = flame_colors(int(self.days))
-        px, py = .50, .06
+        body = _flame_texture('flame_body.png')
         with self.canvas:
             if self.days >= 7:
-                Color(outer[0], outer[1], outer[2], 0.13)
-                g = s * 1.0
+                Color(outer[0], outer[1], outer[2], 0.14)
+                g = s * 1.05
                 Ellipse(pos=(self.center_x - g / 2, self.center_y - g / 2), size=(g, g))
-            for i in range(self.layers):
-                t = i / float(self.layers - 1)
-                scale = 1.0 - 0.72 * t
-                col = [outer[k] + (core[k] - outer[k]) * (t ** 0.85) for k in range(3)]
-                Color(col[0], col[1], col[2], 1)
-                cont = []
-                for (x, y) in _FLAME_OUTLINE:
-                    sx = px + (x - px) * scale
-                    sy = py + (y - py) * scale * (1.0 - 0.06 * t)
-                    cont += [ox + sx * s, oy + sy * s]
-                drawn = False
-                if Tesselator is not None:
-                    try:
-                        tess = Tesselator()
-                        tess.add_contour(cont)
-                        if tess.tesselate(WINDING_ODD, TYPE_POLYGONS):
-                            for vertices, indices in tess.meshes:
-                                Mesh(vertices=vertices, indices=indices, mode='triangle_fan')
-                            drawn = True
-                    except Exception:                       # noqa: BLE001
-                        drawn = False
-                if not drawn:                               # simple fan from the centre
-                    cx = ox + (px + (.5 - px) * scale) * s
-                    cy = oy + (py + (.42 - py) * scale) * s
-                    verts = [cx, cy, 0, 0]
-                    for k in range(0, len(cont), 2):
-                        verts += [cont[k], cont[k + 1], 0, 0]
-                    verts += [cont[0], cont[1], 0, 0]
-                    Mesh(vertices=verts, indices=list(range(len(verts) // 4)),
-                         mode='triangle_fan')
+            if body is None:                                # asset missing
+                Color(outer[0], outer[1], outer[2], 1)
+                Ellipse(pos=(pos[0] + s * .15, pos[1]), size=(s * .7, s * .85))
+                return
+            Color(outer[0], outer[1], outer[2], 1)
+            Rectangle(texture=body, pos=pos, size=(s, s))
+            Color(core[0], core[1], core[2], 1)
+            Rectangle(texture=_flame_texture('flame_top.png'), pos=pos, size=(s, s))
+            lit = (1.0, .97, .78, 1) if self.days > 0 else (.82, .82, .84, 1)
+            Color(*lit)
+            Rectangle(texture=_flame_texture('flame_core.png'), pos=pos, size=(s, s))
 
 
 # ======================================================================
@@ -1038,6 +1091,19 @@ class ATextInput(TextInput):
     def _on_focus(self, *a):
         self._caret_on = True
         self._upd()
+        if self.focus:
+            Clock.schedule_once(self._scroll_into_view, 0.15)
+
+    def _scroll_into_view(self, dt):
+        """Keep the focused field visible inside a surrounding ScrollView."""
+        w = self.parent
+        while w is not None and not isinstance(w, ScrollView):
+            w = w.parent
+        if w is not None and w.children and w.children[0].height > w.height + 1:
+            try:
+                w.scroll_to(self, padding=dp(24), animate=False)
+            except Exception:                                   # noqa: BLE001
+                pass
 
     def _toggle_caret(self, dt):
         if not self.get_root_window():
@@ -1185,15 +1251,20 @@ class FormField(BoxLayout):
         return self.input.text.strip()
 
 
+_WIN_REF = {'h': 0}
+
+
 class Dialog(ModalView):
     """Modal card with a title, a body widget and a row of buttons.
 
     buttons = [(text, callback, style), ...]; the dialog closes after each
     button unless the callback returns False.
 
-    The dialog follows the window height, so when the on-screen keyboard
-    opens (Window shrinks, see main.py) the card shrinks too and its body
-    scrolls: the buttons are never hidden behind the keyboard.
+    A dialog that contains text fields is pinned to the top part of the screen
+    (at most about half of its height) so the on-screen keyboard, which Android
+    draws on top of the app, can never hide a field or the buttons; the body
+    scrolls when it is taller.  If the system does shrink the window for the
+    keyboard, the card simply follows the window height.
     """
 
     def __init__(self, title='', body=None, buttons=(), message='', body_max=None,
@@ -1252,11 +1323,40 @@ class Dialog(ModalView):
         self.bind(on_dismiss=self._unbind_window)
         self._fit()
 
+    def open(self, *a, **kw):
+        super().open(*a, **kw)
+        self._fit()
+
     def _unbind_window(self, *a):
         Window.unbind(size=self._fit)
 
+    def _has_input(self):
+        if self._body is None:
+            return False
+        return any(isinstance(w, ATextInput) for w in self._body.walk(restrict=True))
+
+    def _top_mode(self):
+        """True when the card must sit in the upper part of the screen so the
+        on-screen keyboard (which Android draws over the app) never covers a field.
+        If the system already shrinks the window for the keyboard, centre normally."""
+        if not self._has_input():
+            return False
+        return Window.height >= 0.85 * _WIN_REF['h']
+
+    def _align_center(self, *a):
+        if not self._is_open:
+            return
+        if self._top_mode():
+            self.center_x = self._window.width / 2.0
+            self.top = self._window.height - dp(26)
+        else:
+            self.center = self._window.center
+
     def _fit(self, *a):
+        _WIN_REF['h'] = max(_WIN_REF['h'], Window.height)
         avail = Window.height * 0.95
+        if self._top_mode():
+            avail = min(avail, max(dp(300), Window.height * 0.52))
         if self._sv is not None:
             pad = self._card.padding
             pad_v = pad[1] + pad[3]
@@ -1268,6 +1368,7 @@ class Dialog(ModalView):
             self._sv.height = max(dp(40), min(self._body.height, room, cap))
             self._sv.bar_width = dp(3) if self._body.height > self._sv.height + 1 else 0
         self.height = min(self._card.height, avail)
+        self._align_center()
 
     def _pressed(self, cb):
         res = cb() if cb else None
@@ -1370,6 +1471,10 @@ class TopBar(BoxLayout):
         self.lead.bind(on_release=lambda *_: self._lead_pressed())
         self.title = ALabel(raw='', font_size=sp(20), bold=True, color=C('text'),
                             align='auto')
+        self.subtitle = ALabel(raw='', font_size=sp(12), color=C('sub'), align='auto',
+                               size_hint_y=None, height=dp(18))
+        self.title_box = BoxLayout(orientation='vertical', spacing=0)
+        self.logo = None
         self.actions = BoxLayout(orientation='horizontal', size_hint=(None, 1), width=0,
                                  spacing=dp(2))
         self.mode = 'menu'
@@ -1383,7 +1488,15 @@ class TopBar(BoxLayout):
 
     def _rebuild(self):
         self.clear_widgets()
-        add_row(self, [self.lead, self.title, self.actions])
+        self.title_box.clear_widgets()
+        self.title_box.add_widget(self.title)
+        if self.subtitle.raw:
+            self.title_box.add_widget(self.subtitle)
+        items = [self.lead]
+        if self.logo is not None:
+            items.append(self.logo)
+        items += [self.title_box, self.actions]
+        add_row(self, items)
 
     def _lead_pressed(self):
         if self.mode == 'back':
@@ -1391,8 +1504,16 @@ class TopBar(BoxLayout):
         else:
             self._on_menu()
 
-    def set(self, title, mode='menu', actions=()):
+    def set(self, title, mode='menu', actions=(), sub='', logo=False):
         self.title.raw = title
+        self.subtitle.raw = sub or ''
+        self.title.font_size = sp(22 if logo else 20)
+        self.height = dp(70) if (sub or logo) else dp(58)
+        if logo:
+            self.logo = centered(logo_image(dp(46)), (dp(46), dp(46)))
+        else:
+            self.logo = None
+        self._rebuild()
         self.mode = mode
         self.lead.name = 'back' if mode == 'back' else 'menu'
         self.lead.mirror = (mode == 'back' and rtl.UI_RTL)

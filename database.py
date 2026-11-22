@@ -476,28 +476,32 @@ class Database:
                 'last_played': None}
 
     def is_level_unlocked(self, level):
-        if level <= 1 or self.get_bool('unlock_all'):
+        prev = data_bank.prev_in_group(level)
+        if prev is None or self.get_bool('unlock_all'):
             return True
-        return bool(self.level_info(level - 1)['passed'])
+        return bool(self.level_info(prev)['passed'])
+
+    def unlocked_levels(self):
+        return [lv for lv in data_bank.level_ids() if self.is_level_unlocked(lv)]
 
     def max_unlocked_level(self):
-        top = 1
-        for lv in range(1, data_bank.level_count() + 1):
-            if self.is_level_unlocked(lv):
-                top = lv
-        return top
+        ids = self.unlocked_levels()
+        return ids[-1] if ids else 1
 
     def save_level_result(self, level, score_pct):
-        """Returns True when this result unlocked the next level for the first time."""
+        """Returns the id of the level this result unlocked for the first time
+        (0 when nothing new was unlocked)."""
         info = self.level_info(level)
-        was_next_open = self.is_level_unlocked(level + 1)
+        nxt = data_bank.next_in_group(level)
+        was_next_open = bool(nxt) and self.is_level_unlocked(nxt)
         best = max(info['best_score'], int(score_pct))
         passed = 1 if (info['passed'] or score_pct >= PASS_SCORE) else 0
         self._x('INSERT OR REPLACE INTO level_progress'
                 '(level, best_score, attempts, passed, last_played) VALUES (?, ?, ?, ?, ?)',
                 (level, best, info['attempts'] + 1, passed, _now()))
-        return (not was_next_open) and self.is_level_unlocked(level + 1) \
-            and level < data_bank.level_count()
+        if nxt and (not was_next_open) and self.is_level_unlocked(nxt):
+            return nxt
+        return 0
 
     # ----------------------------------------------------------- smart pool
     def smart_pool(self, limit=20, kinds=('word', 'sentence')):

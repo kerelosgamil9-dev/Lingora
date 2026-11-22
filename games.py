@@ -73,7 +73,7 @@ class Feeder:
         if self.source == 'bank':
             lv = cfg.get('levels')
             self.progressive = not lv
-            self.levels = list(lv) if lv else list(range(1, db.max_unlocked_level() + 1))
+            self.levels = list(lv) if lv else db.unlocked_levels()
             self.by_level = {l: db.bank_items([l], self.kinds) for l in self.levels}
 
     def available(self):
@@ -161,7 +161,7 @@ class Feeder:
     def _far(self, kind):
         if kind not in self._dist_cache:
             self._dist_cache[kind] = self.db.bank_items(
-                range(1, data_bank.level_count() + 1), (kind,))
+                data_bank.level_ids(), (kind,))
         return list(self._dist_cache[kind])
 
 
@@ -431,12 +431,12 @@ class QuizGame(GameBase):
     # -- spelling ---------------------------------------------------------------
     def _build_spell(self):
         it = self.item
-        card = auto_card(padding=[dp(16), dp(16)], spacing=dp(10))
+        card = auto_card(padding=[dp(14), dp(12)], spacing=dp(4))
         card.add_widget(label(tr('q_spell'), size=13, color='sub', bold=True, align='center'))
         card.add_widget(label(it['ar'], size=28, bold=True, align='center'))
-        row = hbox(dp(46))
+        row = hbox(dp(42))
         row.add_widget(Widget())
-        sp_btn = IconButton(name='speaker', color=C('primary'), size_hint=(None, 1), width=dp(46))
+        sp_btn = IconButton(name='speaker', color=C('primary'), size_hint=(None, 1), width=dp(42))
         sp_btn.bind(on_release=lambda *_: self.app.speak(it['en']))
         row.add_widget(sp_btn)
         row.add_widget(Widget())
@@ -446,10 +446,8 @@ class QuizGame(GameBase):
         card.add_widget(self.pattern)
         self.body.add_widget(card)
 
-        extra = {'keyboard_suggestions': False} if hasattr(ATextInput, 'keyboard_suggestions') else {}
         self.spell_input = ATextInput(hint=tr('type_english'), font_size=sp(20),
-                                      halign='center', height=dp(56), input_type='text',
-                                      **extra)
+                                      halign='center', height=dp(56))
         self.spell_input.bind(on_text_validate=lambda *_: self._check_spell())
         self.body.add_widget(self.spell_input)
         self.spell_msg = label('', size=17, bold=True, align='center')

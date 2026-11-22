@@ -30,7 +30,7 @@ import rtl
 from database import PASS_SCORE
 from strings import tr
 from theme import C, FOLDER_COLORS, HIGHLIGHTS, alpha
-from widgets import (ALabel, ATextInput, BarProgress, Card, ColorDots, Dialog, Divider,
+from widgets import (TintButton, ALabel, ATextInput, BarProgress, Card, ColorDots, Dialog, Divider,
                      FlameWidget, FormField, Icon, IconButton, RButton, Segmented, TapCard,
                      Toast, Toggle, WeekStrip, add_row, auto_card, button, confirm, hbox, label,
                      logo_image, spacer, vbox)
@@ -217,21 +217,12 @@ def streak_message(n):
 
 class HomeScreen(BaseScreen):
     def topbar_spec(self):
-        return (tr('nav_home'), 'menu', [])
+        return (tr('welcome'), 'menu', [], {'sub': tr('home_sub'), 'logo': True})
 
     def build(self, col):
         app, db = self.app, self.app.db
         st = db.stats()
         streak = db.get_streak()
-
-        # --- hero --------------------------------------------------------
-        hero = hbox(dp(58), spacing=dp(12))
-        htxt = BoxLayout(orientation='vertical', spacing=dp(1))
-        htxt.add_widget(label(tr('welcome'), size=22, bold=True, wrap=False, size_hint_y=1))
-        htxt.add_widget(label(tr('home_sub'), size=13, color='sub', wrap=False,
-                              size_hint_y=None, height=dp(22)))
-        add_row(hero, [logo_image(dp(54)), htxt])
-        col.add_widget(hero)
 
         # --- streak + daily goal ---------------------------------------
         card = auto_card(padding=[dp(16), dp(14)], spacing=dp(12), radius=dp(22))
@@ -283,11 +274,11 @@ class HomeScreen(BaseScreen):
             data = data_bank.get_level(nxt)
             c = auto_card(padding=[dp(16), dp(14)], spacing=dp(8), radius=dp(22))
             c.add_widget(label(tr('continue_learning'), size=13, color='sub', bold=True))
-            c.add_widget(label(tr('level_n', n=nxt) + ' — ' + (
-                data['title_ar'] if rtl.UI_RTL else data['title_en']), size=19, bold=True))
+            c.add_widget(label(tr('level_n', n=nxt) + ' — ' + level_title(nxt),
+                               size=19, bold=True))
             m, t = db.level_mastery(nxt)
             c.add_widget(BarProgress(value=m / float(t), height=dp(8)))
-            c.add_widget(button(tr('open_level'), lambda n=nxt: app.open_level(n), height=dp(46)))
+            c.add_widget(button(tr('start_level'), lambda n=nxt: app.open_level(n), height=dp(46)))
             col.add_widget(c)
 
         # --- quick actions ---------------------------------------------------
@@ -336,7 +327,7 @@ class HomeScreen(BaseScreen):
 
     def _next_level(self):
         db = self.app.db
-        for lv in range(1, data_bank.level_count() + 1):
+        for lv in data_bank.group_ids('main') + data_bank.group_ids('extra'):
             if db.is_level_unlocked(lv) and not db.level_info(lv)['passed']:
                 return lv
         return None
@@ -386,13 +377,16 @@ class FoldersScreen(BaseScreen):
                               color='sub', wrap=False, size_hint_y=None, height=dp(22)))
         info.add_widget(BarProgress(value=(f['mastered'] / float(total)) if total else 0,
                                     fg=C('success'), height=dp(7)))
-        acts = BoxLayout(orientation='vertical', size_hint=(None, 1), width=dp(44))
-        e = IconButton(name='edit', color=C('sub'))
+        acts = BoxLayout(orientation='vertical', size_hint=(None, 1), width=dp(40),
+                         spacing=dp(8))
+        acts.add_widget(Widget())
+        e = TintButton('edit', C('primary'), box=dp(38))
         e.bind(on_release=lambda *_: self.edit_folder(f))
-        d = IconButton(name='trash', color=C('danger'))
+        d = TintButton('trash', C('danger'), box=dp(38))
         d.bind(on_release=lambda *_: self.delete_folder(f))
         acts.add_widget(e)
         acts.add_widget(d)
+        acts.add_widget(Widget())
         add_row(card, [stripe, info, acts])
         return card
 
@@ -487,10 +481,14 @@ class ItemRow(BoxLayout):
         star.bind(on_release=lambda *_: self._toggle_master())
         mark = IconButton(name='marker', color=C('sub'), size_hint=(None, 1), width=dp(40))
         mark.bind(on_release=lambda *_: self._highlight())
-        edit = IconButton(name='edit', color=C('sub'), size_hint=(None, 1), width=dp(40))
-        edit.bind(on_release=lambda *_: edit_cb(item))
-        trash = IconButton(name='trash', color=C('danger'), size_hint=(None, 1), width=dp(40))
-        trash.bind(on_release=lambda *_: self._delete())
+        edit_b = TintButton('edit', C('primary'), box=dp(34))
+        edit_b.bind(on_release=lambda *_: edit_cb(item))
+        trash_b = TintButton('trash', C('danger'), box=dp(34))
+        trash_b.bind(on_release=lambda *_: self._delete())
+        edit = centered(edit_b, (dp(38), dp(34)))
+        trash = centered(trash_b, (dp(38), dp(34)))
+        edit.width = trash.width = dp(38)
+        edit_b.size = trash_b.size = (dp(34), dp(34))
         stats = label(tr('item_stats', c=item['correct'], w=item['wrong']), size=12, color='sub',
                       wrap=False, size_hint_y=1)
         add_row(acts, [stats, star, mark, edit, trash])
@@ -679,15 +677,38 @@ class FolderScreen(BaseScreen):
 # ======================================================================
 # Levels
 # ======================================================================
+LEVEL_QUESTIONS = 20
+
+
+def level_title(n):
+    lv = data_bank.get_level(n)
+    if not lv:
+        return str(n)
+    return lv['title_ar'] if rtl.UI_RTL else lv['title_en']
+
+
+_level_label = level_title
+
+
+def level_cfg(n):
+    """One tap = a random mixed quiz over this level (all question types)."""
+    return {'source': 'bank', 'levels': [n], 'mode': 'mixed', 'n': LEVEL_QUESTIONS,
+            'level_test': n, 'title': 'mode_test'}
+
+
 class LevelsScreen(BaseScreen):
     def topbar_spec(self):
         return (tr('nav_levels'), 'menu', [])
 
     def build(self, col):
-        app, db = self.app, self.app.db
         col.add_widget(label(tr('levels_intro', p=PASS_SCORE), size=14, color='sub'))
-        for lv in data_bank.LEVELS:
-            col.add_widget(self._level_card(lv))
+        for group, title_key, hint_key in (('main', 'track_main', 'track_main_d'),
+                                           ('extra', 'track_extra', 'track_extra_d')):
+            col.add_widget(section_title(tr(title_key)))
+            col.add_widget(label(tr(hint_key), size=13, color='sub'))
+            for lv in data_bank.LEVELS:
+                if lv['group'] == group:
+                    col.add_widget(self._level_card(lv))
 
     def _level_card(self, lv):
         app, db = self.app, self.app.db
@@ -695,80 +716,55 @@ class LevelsScreen(BaseScreen):
         unlocked = db.is_level_unlocked(n)
         info = db.level_info(n)
         m, t = db.level_mastery(n)
-        card = TapCard(size_hint_y=None, height=dp(96), padding=[dp(12), dp(10)],
-                       spacing=dp(12), orientation='horizontal')
+        card = TapCard(size_hint_y=None, height=dp(88), padding=[dp(12), dp(10)],
+                       spacing=dp(10), orientation='horizontal')
         card.bind(on_release=lambda *_: self._tapped(n, unlocked))
         badge = Badge(FOLDER_COLORS[(n - 1) % len(FOLDER_COLORS)] if unlocked else C('card2'),
-                      raw=str(n), font_size=sp(22), color=(1, 1, 1, 1) if unlocked else C('sub'))
+                      raw=str(n), font_size=sp(20), color=(1, 1, 1, 1) if unlocked else C('sub'))
         mid = BoxLayout(orientation='vertical', spacing=dp(4))
-        title = lv['title_ar'] if rtl.UI_RTL else lv['title_en']
-        mid.add_widget(label(title, size=16, bold=True, size_hint_y=1, autoheight=False,
-                             color='text' if unlocked else 'sub', height=dp(40)))
+        mid.add_widget(label(level_title(n), size=16, bold=True, size_hint_y=1,
+                             autoheight=False, color='text' if unlocked else 'sub'))
         mid.add_widget(BarProgress(value=m / float(t), fg=C('success'), height=dp(7)))
-        mid.add_widget(label(tr('level_progress', a=m, b=t), size=12, color='sub', wrap=False,
+        sub = tr('level_progress', a=m, b=t)
+        if info['passed']:
+            sub += '  •  %d%%' % info['best_score']
+        mid.add_widget(label(sub, size=12, color='sub', wrap=False,
                              size_hint_y=None, height=dp(20)))
-        right = BoxLayout(orientation='vertical', size_hint=(None, 1), width=dp(56))
+        right = BoxLayout(orientation='horizontal', size_hint=(None, 1), width=dp(84),
+                          spacing=dp(2))
         if not unlocked:
-            right.add_widget(centered(Icon(name='lock', color=C('sub')), (dp(26), dp(26))))
-        elif info['passed']:
-            right.add_widget(centered(Icon(name='star', filled=True, color=C('accent')),
-                                      (dp(28), dp(28))))
-            right.add_widget(label('%d%%' % info['best_score'], size=13, bold=True, wrap=False,
-                                   align='center', size_hint_y=None, height=dp(22)))
+            right.add_widget(Widget())
+            right.add_widget(centered(Icon(name='lock', color=C('sub')), (dp(24), dp(24))))
         else:
-            right.add_widget(centered(Icon(name='chevron', color=C('sub'),
-                                           mirror=rtl.UI_RTL), (dp(26), dp(26))))
+            words = IconButton(name='book', color=C('sub'), size_hint=(None, 1), width=dp(40))
+            words.bind(on_release=lambda *_: self._words(n))
+            right.add_widget(words)
+            if info['passed']:
+                right.add_widget(centered(Icon(name='star', filled=True, color=C('accent')),
+                                          (dp(26), dp(26))))
+            else:
+                right.add_widget(centered(Icon(name='play', color=C('primary')),
+                                          (dp(26), dp(26))))
         add_row(card, [badge, mid, right])
         return card
 
     def _tapped(self, n, unlocked):
         if not unlocked:
-            Toast.show(tr('level_locked', n=n - 1, p=PASS_SCORE), 'warn')
+            prev = data_bank.prev_in_group(n)
+            Toast.show(tr('level_locked', n=level_title(prev), p=PASS_SCORE), 'warn')
             return
         self.app.open_level(n)
 
+    def _words(self, n):
+        WordsSheet(self.app, n).open()
 
-class LevelSheet:
-    """Dialog with everything you can do inside one level."""
+
+class WordsSheet:
+    """The words of one level (with speaker) + 'add to my folders'."""
 
     def __init__(self, app, n):
         self.app, self.n = app, n
-        lv = data_bank.get_level(n)
-        db = app.db
-        info = db.level_info(n)
-        m, t = db.level_mastery(n)
-        body = vbox(spacing=dp(10))
-        title = lv['title_ar'] if rtl.UI_RTL else lv['title_en']
-        body.add_widget(label(title, size=17, bold=True, color='primary'))
-        body.add_widget(label(tr('level_progress', a=m, b=t) + '   •   ' +
-                              tr('best_score', n=info['best_score']), size=13, color='sub'))
-        cfg = {'source': 'bank', 'levels': [n]}
-        entries = [
-            ('mode_flash', lambda: self._go(dict(cfg, mode='flash', n=10))),
-            ('mode_mcq', lambda: self._go(dict(cfg, mode='mcq', n=10))),
-            ('mode_rev', lambda: self._go(dict(cfg, mode='rev', n=10))),
-            ('mode_match', lambda: self._go(dict(cfg, mode='match', n=10))),
-            ('mode_spell', lambda: self._go(dict(cfg, mode='spell', n=8))),
-            ('level_words', self._words),
-            ('copy_level', self._copy),
-        ]
-        test = button(tr('take_test', p=PASS_SCORE), lambda: self._go(
-            dict(cfg, mode='mixed', n=10, level_test=n, title='mode_test')), style='success')
-        body.add_widget(test)
-        for key, cb in entries:
-            body.add_widget(button(tr(key), cb, style='soft', height=dp(46)))
-        self.dlg = Dialog(title=tr('level_n', n=n), body=body,
-                          buttons=[(tr('close'), None, 'soft')])
-
-    def open(self):
-        self.dlg.open()
-
-    def _go(self, cfg):
-        self.dlg.dismiss()
-        self.app.start_game(cfg)
-
-    def _words(self):
-        items = self.app.db.bank_items([self.n])
+        items = app.db.bank_items([n], ('word',))
         body = vbox(spacing=dp(2))
         for it in items:
             row = BoxLayout(orientation='horizontal', size_hint_y=None, spacing=dp(6))
@@ -782,16 +778,20 @@ class LevelSheet:
             add_row(row, [col, sp_btn])
             body.add_widget(row)
             body.add_widget(Divider(style='solid', color=C('divider'), thickness=1, height=dp(8)))
-        Dialog(title=tr('level_words'), body=body, buttons=[(tr('close'), None, 'soft')],
-               body_max=Window.height * 0.7).open()
-        return False
+        self.dlg = Dialog(title=tr('level_n', n=n) + ' — ' + level_title(n), body=body,
+                          buttons=[(tr('copy_level_short'), self._copy, 'soft'),
+                                   (tr('close'), None, 'primary')],
+                          body_max=Window.height * 0.62)
+
+    def open(self):
+        self.dlg.open()
 
     def _copy(self):
-        lv = data_bank.get_level(self.n)
-        name = tr('level_n', n=self.n) + ' - ' + (lv['title_ar'] if rtl.UI_RTL else lv['title_en'])
+        name = tr('level_n', n=self.n) + ' - ' + level_title(self.n)
         self.app.db.copy_level_to_folder(self.n, name)
         Toast.show(tr('level_copied'), 'ok')
         self.app.refresh_drawer()
+        return True
 
 
 # ======================================================================
@@ -881,7 +881,7 @@ def source_dialog(app, mode, base=None, on_start=None):
         if state['source'] == 'bank':
             dyn.add_widget(label(tr('src_system_hint'), size=13, color='sub'))
             opts = [(0, tr('progressive'))] + [(n, tr('level_short', n=n))
-                                               for n in range(1, data_bank.level_count() + 1)
+                                               for n in data_bank.level_ids()
                                                if db.is_level_unlocked(n)]
             dyn.add_widget(chips(opts, state['level'], lambda v: state.update(level=v), cols=3,
                                  size=13))
@@ -955,6 +955,9 @@ class GameScreen(BaseScreen):
 
     def topbar_spec(self):
         cfg = self.app.game_cfg or {}
+        if cfg.get('level_test'):
+            n = cfg['level_test']
+            return (tr('level_n', n=n) + ' · ' + level_title(n), 'back', [])
         key = cfg.get('title') or 'mode_' + str(cfg.get('mode', 'mcq'))
         return (tr(key), 'back', [])
 
@@ -1013,7 +1016,7 @@ class GameScreen(BaseScreen):
             if res['pct'] >= PASS_SCORE:
                 lines.append((tr('test_passed', n=lvl), 'ok'))
                 if unlocked:
-                    lines.append((tr('level_unlocked', n=lvl + 1), 'ok'))
+                    lines.append((tr('level_unlocked', n=_level_label(unlocked)), 'ok'))
             else:
                 lines.append((tr('test_failed', p=PASS_SCORE), 'bad'))
         good = res['pct'] >= 60
