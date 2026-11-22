@@ -37,7 +37,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
 import rtl
-from services import find_asset
+from services import ANDROID, find_asset, ime_visible
 from theme import C, THEME, alpha, mix
 
 
@@ -1398,8 +1398,27 @@ class ATextInput(TextInput):
                 vk_show(self)
             else:
                 Clock.schedule_once(lambda dt: vk_release(self), 0.06)
+        elif VK['mode'] == 'auto' and ANDROID and self.focus:
+            Clock.schedule_once(self._safety_check, 1.8)
         if self.focus:
             Clock.schedule_once(self._scroll_into_view, 0.15)
+
+    def _safety_check(self, dt):
+        """Second safety net: still focused 1.8 s later and the phone's keyboard is not
+        on screen -> use the in-app keyboard."""
+        if not self.focus or VK['mode'] != 'auto':
+            return
+        vk = _VK_STATE['widget']
+        if vk is not None and vk.parent is not None:
+            return
+        shown = ime_visible()
+        if shown is None:
+            try:
+                shown = bool(Window._win.is_keyboard_shown())
+            except Exception:                                   # noqa: BLE001
+                shown = False
+        if not shown:
+            vk_fallback(self)
 
     def _scroll_into_view(self, dt):
         """Keep the focused field visible inside a surrounding ScrollView."""

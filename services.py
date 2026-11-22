@@ -107,6 +107,31 @@ def _force_ime():
         pass
 
 
+KB_LOG = []          # short trace of what the keyboard probe saw (shown in diagnostics)
+
+
+def _log(msg):
+    KB_LOG.append('%.1f  %s' % (time.time() % 1000, msg))
+    del KB_LOG[:-14]
+
+
+def ime_visible():
+    """True/False when Android reports whether the keyboard is really on screen,
+    None when this cannot be determined (Android < 11)."""
+    try:
+        from jnius import autoclass
+        if autoclass('android.os.Build$VERSION').SDK_INT < 30:
+            return None
+        activity = get_activity()
+        insets = activity.getWindow().getDecorView().getRootWindowInsets()
+        if insets is None:
+            return None
+        ime = autoclass('android.view.WindowInsets$Type').ime()
+        return bool(insets.isVisible(ime))
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
 def install_keyboard_probe(on_fail):
     """Android only.  Kivy drops the keyboard 0.2 s after asking for it when the phone
     has not drawn it yet.  Here the phone's keyboard gets ~1.2 s; if it still is not
@@ -123,6 +148,8 @@ def install_keyboard_probe(on_fail):
         def request(callback, target, input_type='text', keyboard_suggestions=True):
             state['t0'] = time.time()
             state['seen'] = False
+            state['last'] = None
+            _log('request_keyboard (%s)' % type(target).__name__)
             kb = orig_request(callback, target, input_type, keyboard_suggestions)
             Clock.schedule_once(lambda dt: _force_ime(), 0.1)
             return kb
@@ -132,9 +159,15 @@ def install_keyboard_probe(on_fail):
             if kb is None:
                 return False
             try:
-                shown = Window._win.is_keyboard_shown()
+                shown = bool(Window._win.is_keyboard_shown())
             except Exception:                               # noqa: BLE001
                 shown = False
+            real = ime_visible()           # what Android itself says is on screen
+            if real is not None:
+                shown = shown and real
+            if state.get('last') != (shown, real):
+                state['last'] = (shown, real)
+                _log('sdl+ime shown=%s ime_visible=%s' % (shown, real))
             if shown:
                 state['seen'] = True
                 return None
@@ -144,6 +177,7 @@ def install_keyboard_probe(on_fail):
             age = time.time() - state['t0']
             if age > 1.2:
                 try:
+                    _log('keyboard not visible after %.1fs -> in-app keyboard' % age)
                     if on_fail(kb.target):
                         return False
                 except Exception:                           # noqa: BLE001
@@ -163,7 +197,7 @@ def keyboard_diagnostics():
     """Human-readable facts about the phone's keyboard state (for troubleshooting)."""
     lines = ['android: %s' % ANDROID]
     if not ANDROID:
-        return lines
+        return lines + KB_LOG
     try:
         from jnius import autoclass
         activity = get_activity()
@@ -198,7 +232,9 @@ def keyboard_diagnostics():
             lines.append('kivy: ? %s' % e)
     except Exception as e:                                  # noqa: BLE001
         lines.append('error: %s' % e)
-    return lines
+    lines.append('ime visible: %s' % ime_visible())
+    lines.append('--- log ---')
+    return lines + (KB_LOG or ['(no keyboard request yet)'])
 
 
 # ---------------------------------------------------------------- activity
