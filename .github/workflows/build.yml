@@ -49,6 +49,17 @@ jobs:
           path: .buildozer
           key: buildozer-project-${{ hashFiles('buildozer.spec') }}
 
+      - name: Use the fixed signing key (so every build can update the installed app)
+        run: |
+          mkdir -p ~/.android
+          cp lingora.keystore ~/.android/debug.keystore
+
+      - name: Increase the version code on every build
+        run: |
+          sed -i '/^android.numeric_version/d' buildozer.spec
+          sed -i "/^version = /a android.numeric_version = $((1000 + ${{ github.run_number }}))" buildozer.spec
+          grep -n "numeric_version" buildozer.spec
+
       - name: Build debug APK
         run: buildozer -v android debug > build.log 2>&1
 
