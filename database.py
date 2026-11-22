@@ -46,7 +46,7 @@ DEFAULT_SETTINGS = {
     'round_size': '10',
     'unlock_all': '0',
     'auto_speak': '1',
-    'native_input': '1',
+    'inapp_keyboard': '1',
 }
 
 

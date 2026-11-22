@@ -37,7 +37,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 
 import rtl
-from services import find_asset, native_prompt, ANDROID
+from services import find_asset
 from theme import C, THEME, alpha, mix
 
 
@@ -1014,10 +1014,287 @@ class FlameWidget(Widget):
 # ======================================================================
 # Text inputs
 # ======================================================================
-# On Android typing goes through the phone's own text dialog (see services.native_prompt):
-# Kivy's keyboard support is unreliable on some devices.  main.py switches this from
-# the 'native_input' setting.
-NATIVE_INPUT = {'on': ANDROID}
+# ======================================================================
+# In-app keyboard (Arabic / English / symbols)
+# ======================================================================
+# Android's own keyboard fails to open on some phones when requested from a Kivy
+# app, so typing uses this keyboard by default (Settings -> in-app keyboard).
+VK = {'on': True}
+_VK_STATE = {'uid': None, 'widget': None}
+
+_KB_EN = [list('qwertyuiop'), list('asdfghjkl'), ['SHIFT'] + list('zxcvbnm') + ['BACK']]
+_KB_AR = [list('ضصثقفغعهخحج'), list('شسيبلاتنمكط'),
+          list('ئءؤرىةوزظدذ') + ['BACK']]
+_KB_SYM = [list('1234567890'), list('-/:;()$&@"'), ['.', ',', '?', '!', "'", '_', '+', '=', '%', 'BACK']]
+_KB_AR_SYM = [list('٠١٢٣٤٥٦٧٨٩'), list('-/:;()$&@"'), ['.', '،', '؟', '!', "'", '_', '+', '=', '%', 'BACK']]
+
+
+class _Key(ButtonBehavior, Widget):
+    def __init__(self, kind, text, on_key, style='key', **kw):
+        super().__init__(**kw)
+        self.kind, self.text_, self.on_key, self.style = kind, text, on_key, style
+        with self.canvas.before:
+            self._c = Color(*self._col(False))
+            self._r = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(9)])
+        self.lbl = ALabel(raw=text, font_size=sp(19 if len(text) < 3 else 14), bold=True,
+                          color=self._fg(), align='center', size_hint=(None, None))
+        self.add_widget(self.lbl)
+        self.bind(pos=self._upd, size=self._upd, state=lambda *a: self._paint())
+        self._upd()
+
+    def _col(self, down):
+        if self.style == 'primary':
+            return mix(C('primary'), (0, 0, 0, 1), 0.2) if down else C('primary')
+        if self.style == 'fn':
+            return alpha(C('text'), 0.22) if down else alpha(C('text'), 0.12)
+        return alpha(C('text'), 0.26) if down else C('card2') if THEME.is_dark else C('card')
+
+    def _fg(self):
+        return C('on_primary') if self.style == 'primary' else C('text')
+
+    def _paint(self):
+        self._c.rgba = self._col(self.state == 'down')
+
+    def set_text(self, t):
+        self.text_ = t
+        self.lbl.raw = t
+
+    def _upd(self, *a):
+        self._r.pos = self.pos
+        self._r.size = self.size
+        self.lbl.size = self.size
+        self.lbl.pos = self.pos
+
+    def on_press(self):
+        self.on_key(self)
+
+
+class VKeyboard(BoxLayout):
+    def __init__(self, **kw):
+        super().__init__(orientation='vertical', size_hint=(None, None),
+                         padding=[dp(4), dp(6), dp(4), dp(8)], spacing=dp(6), **kw)
+        self.height = dp(46) * 4 + dp(6) * 3 + dp(14)
+        self.target = None
+        self.page = 'en'
+        self.shift = False
+        import strings
+        self.last_letters = 'ar' if getattr(strings, 'LANG', 'ar') == 'ar' else 'en'
+        self.page = self.last_letters
+        with self.canvas.before:
+            self._bgc = Color(*self._panel())
+            self._bg = Rectangle(pos=self.pos, size=self.size)
+            self._lc = Color(*C('border'))
+            self._ln = Rectangle(pos=self.pos, size=(self.width, dp(1)))
+        self.bind(pos=self._upd, size=self._upd)
+        self._repeat = None
+        self._build()
+        Window.bind(width=self._fit, on_touch_up=self._outside_tap)
+        self._fit()
+
+    # -- layout --------------------------------------------------------------
+    def _upd(self, *a):
+        self._bg.pos, self._bg.size = self.pos, self.size
+        self._ln.pos = (self.x, self.top)
+        self._ln.size = (self.width, dp(1))
+
+    def _fit(self, *a):
+        self.width = Window.width
+        self.pos = (0, 0)
+
+    @staticmethod
+    def _panel():
+        return C('topbar') if THEME.is_dark else C('bg')
+
+    def _rows(self):
+        if self.page == 'en':
+            return _KB_EN
+        if self.page == 'ar':
+            return _KB_AR
+        return _KB_AR_SYM if self.last_letters == 'ar' else _KB_SYM
+
+    def _build(self):
+        from strings import tr
+        self._bgc.rgba = self._panel()
+        self._lc.rgba = C('border')
+        self.clear_widgets()
+        for row in self._rows():
+            line = BoxLayout(orientation='horizontal', spacing=dp(5))
+            if row is _KB_EN[1]:
+                line.add_widget(Widget(size_hint_x=0.5))
+            for k in row:
+                line.add_widget(self._key(k))
+            if row is _KB_EN[1]:
+                line.add_widget(Widget(size_hint_x=0.5))
+            self.add_widget(line)
+        bottom = BoxLayout(orientation='horizontal', spacing=dp(5))
+        letters = self.page != 'sym'
+        sw = _Key('MODE', '123' if letters else ('ع' if self.last_letters == 'ar' else 'ABC'),
+                  self._press, style='fn', size_hint_x=1.4)
+        lang = _Key('LANG', 'EN' if self.last_letters == 'ar' else 'ع', self._press,
+                    style='fn', size_hint_x=1.1)
+        comma = _Key('CH', '،' if self.last_letters == 'ar' else ',', self._press, size_hint_x=0.9)
+        space = _Key('CH', ' ', self._press, size_hint_x=4.2)
+        dot = _Key('CH', '.', self._press, size_hint_x=0.9)
+        done = _Key('DONE', tr('kb_done'), self._press, style='primary', size_hint_x=1.7)
+        for k in (sw, lang, comma, space, dot, done):
+            bottom.add_widget(k)
+        self.add_widget(bottom)
+
+    def _key(self, k):
+        if k == 'BACK':
+            return _Key('BACK', '⌫', self._press, style='fn', size_hint_x=1.5)
+        if k == 'SHIFT':
+            return _Key('SHIFT', '⇧', self._press, style='fn', size_hint_x=1.5)
+        t = k.upper() if (self.shift and self.page == 'en') else k
+        return _Key('CH', t, self._press)
+
+    # -- behaviour ---------------------------------------------------------
+    def _press(self, key):
+        t = self.target
+        kind = key.kind
+        if kind == 'CH':
+            if t is not None:
+                t.insert_text(key.text_)
+            if self.shift:
+                self.shift = False
+                self._build()
+        elif kind == 'BACK':
+            if t is not None:
+                t.do_backspace()
+            self._start_repeat()
+        elif kind == 'SHIFT':
+            self.shift = not self.shift
+            self._build()
+        elif kind == 'LANG':
+            self.last_letters = 'ar' if self.last_letters == 'en' else 'en'
+            self.page = self.last_letters
+            self.shift = False
+            self._build()
+        elif kind == 'MODE':
+            self.page = 'sym' if self.page != 'sym' else self.last_letters
+            self._build()
+        elif kind == 'DONE':
+            tt = self.target
+            self.hide()
+            if tt is not None and tt.text.strip():
+                tt.dispatch('on_text_validate')
+
+    def _start_repeat(self):
+        self._stop_repeat()
+        self._repeat = Clock.schedule_once(self._repeat_start, 0.45)
+
+    def _repeat_start(self, dt):
+        self._repeat = Clock.schedule_interval(self._repeat_tick, 0.06)
+
+    def _repeat_tick(self, dt):
+        if self.target is None or not any(
+                k.state == 'down' for k in self.walk(restrict=True) if isinstance(k, _Key)
+                and k.kind == 'BACK'):
+            self._stop_repeat()
+            return False
+        self.target.do_backspace()
+
+    def _stop_repeat(self):
+        if self._repeat is not None:
+            self._repeat.cancel()
+            self._repeat = None
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            _VK_STATE['uid'] = touch.uid
+            super().on_touch_down(touch)
+            return True
+        return False
+
+    def on_touch_up(self, touch):
+        if self.collide_point(*touch.pos):
+            self._stop_repeat()
+            super().on_touch_up(touch)
+            return True
+        return super().on_touch_up(touch)
+
+    def on_touch_move(self, touch):
+        if self.collide_point(*touch.pos):
+            return super().on_touch_move(touch) or True
+        return False
+
+    def _outside_tap(self, win, touch):
+        """A tap that is neither on the keyboard nor on a text field closes it."""
+        if self.parent is None or touch.uid == _VK_STATE['uid']:
+            return False
+        if abs(touch.x - touch.ox) > dp(14) or abs(touch.y - touch.oy) > dp(14):
+            return False                                    # a scroll, not a tap
+        self.hide()
+        return False
+
+    # -- show / hide ---------------------------------------------------------
+    def show(self, target):
+        self.target = target
+        lang = getattr(target, 'vk_lang', None)
+        if lang in ('en', 'ar'):
+            self.last_letters = lang
+            self.page = lang
+        elif self.page == 'sym':
+            pass
+        self.shift = False
+        self.theme_refresh()
+        self._build()
+        Clock.unschedule(self._watch)
+        Clock.schedule_interval(self._watch, 0.4)
+        if self.parent is None:
+            Window.add_widget(self)
+        else:                                               # keep it above new dialogs
+            Window.remove_widget(self)
+            Window.add_widget(self)
+
+    def theme_refresh(self):
+        self._bgc.rgba = self._panel()
+
+    def _watch(self, dt):
+        """Close the keyboard when its field disappeared (dialog closed, screen left)."""
+        t = self.target
+        if t is None or t.get_root_window() is None or not t.focus:
+            self.hide()
+            return False
+
+    def hide(self):
+        t = self.target
+        self.target = None
+        self._stop_repeat()
+        Clock.unschedule(self._watch)
+        if self.parent is not None:
+            Window.remove_widget(self)
+        if t is not None and t.focus:
+            t.focus = False
+
+    def release(self, widget):
+        """Called when a field lost focus: close unless another field took over."""
+        if self.target is widget and not widget.focus:
+            self.hide()
+
+
+def _get_vk():
+    if _VK_STATE['widget'] is None:
+        _VK_STATE['widget'] = VKeyboard()
+    return _VK_STATE['widget']
+
+
+def vk_show(target):
+    _get_vk().show(target)
+
+
+def vk_release(widget):
+    if _VK_STATE['widget'] is not None:
+        _VK_STATE['widget'].release(widget)
+
+
+def vk_hide():
+    """Close the keyboard if it is open (True when it was)."""
+    vk = _VK_STATE['widget']
+    if vk is not None and vk.parent is not None:
+        vk.hide()
+        return True
+    return False
 
 
 class ATextInput(TextInput):
@@ -1044,6 +1321,7 @@ class ATextInput(TextInput):
         self._hint_col = kw.pop('hint_text_color', None) or alpha(C('sub'), 0.85)
         self._caret_col = kw.pop('cursor_color', None) or C('primary')
         self._hint_raw = hint or ''
+        self.vk_lang = kw.pop('vk_lang', None)     # 'en' / 'ar' page the keyboard opens on
         clear = (0, 0, 0, 0)
         kw['foreground_color'] = clear          # real text is invisible
         kw['hint_text_color'] = clear
@@ -1094,9 +1372,23 @@ class ATextInput(TextInput):
         self._lb.width = 1.6 if self.focus else 1.1
         self._trig()
 
+    def _apply_kb_mode(self):
+        # with the in-app keyboard Kivy must not ask Android for its own keyboard
+        self.keyboard_mode = 'managed' if VK['on'] else 'auto'
+
+    def focus_input(self):
+        """Give the field focus (and show the keyboard) from code."""
+        self._apply_kb_mode()
+        self.focus = True
+
     def _on_focus(self, *a):
         self._caret_on = True
         self._upd()
+        if VK['on']:
+            if self.focus:
+                vk_show(self)
+            else:
+                Clock.schedule_once(lambda dt: vk_release(self), 0.06)
         if self.focus:
             Clock.schedule_once(self._scroll_into_view, 0.15)
 
@@ -1213,27 +1505,11 @@ class ATextInput(TextInput):
         self._caret_on = True
 
     # -- touch: map the tap to a logical cursor position ----------------------
-    def open_native(self):
-        """Open the system text dialog for this field; False if unavailable."""
-        if not (NATIVE_INPUT['on'] and ANDROID) or self.disabled:
-            return False
-        from strings import tr
-        title = getattr(self, 'native_title', '') or self._hint_raw or ''
-        return native_prompt(title, self._hint_raw, self.text, tr('save'), tr('cancel'),
-                             THEME.is_dark(),
-                             self._native_done)
-
-    def _native_done(self, value):
-        self.text = value
-        self.cursor = self.get_cursor_from_index(len(value))
-        if value.strip():
-            self.dispatch('on_text_validate')
-
     def on_touch_down(self, touch):
         hit = self.collide_point(*touch.pos)
-        if hit and NATIVE_INPUT['on'] and ANDROID and not self.disabled:
-            if self.open_native():
-                return True
+        if hit:
+            self._apply_kb_mode()
+            _VK_STATE['uid'] = touch.uid
         res = super().on_touch_down(touch)
         if hit and self.text:
             Clock.schedule_once(lambda dt, x=touch.x: self._place_cursor(x), 0)
@@ -1260,13 +1536,13 @@ class ATextInput(TextInput):
 class FormField(BoxLayout):
     """Caption + input."""
 
-    def __init__(self, caption, hint='', text='', multiline=False, height=None, **kw):
+    def __init__(self, caption, hint='', text='', multiline=False, height=None, vk_lang=None, **kw):
         kw.setdefault('size_hint_y', None)
         super().__init__(orientation='vertical', spacing=dp(6), **kw)
         self.bind(minimum_height=self.setter('height'))
         self.caption = label(caption, size=13, color='sub', bold=True)
         self.input = ATextInput(hint=hint, text=text, multiline=False)
-        self.input.native_title = caption
+        self.input.vk_lang = vk_lang
         if height:
             self.input.height = height
         self.add_widget(self.caption)

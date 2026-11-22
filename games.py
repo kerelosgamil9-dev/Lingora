@@ -447,7 +447,7 @@ class QuizGame(GameBase):
         self.body.add_widget(card)
 
         self.spell_input = ATextInput(hint=tr('type_english'), font_size=sp(20),
-                                      halign='center', height=dp(56))
+                                      halign='center', height=dp(56), vk_lang='en')
         self.spell_input.bind(on_text_validate=lambda *_: self._check_spell())
         self.body.add_widget(self.spell_input)
         self.spell_msg = label('', size=17, bold=True, align='center')
@@ -486,8 +486,7 @@ class QuizGame(GameBase):
             self._update_pattern()
 
     def _open_input(self):
-        if not self.spell_input.open_native():
-            self.spell_input.focus = True
+        self.spell_input.focus_input()
 
     def _check_spell(self):
         if self.locked or self.finished:

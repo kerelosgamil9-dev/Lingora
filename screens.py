@@ -631,12 +631,12 @@ class FolderScreen(BaseScreen):
         seg = Segmented([('word', tr('kind_word')), ('sentence', tr('kind_sentence'))], kind['v'],
                         on_change=lambda v: set_kind(v))
         body.add_widget(seg)
-        f_en = FormField(tr('word_en'), hint='apple', text=item['en'] if item else '')
-        f_ar = FormField(tr('word_ar'), hint=tr('word_ar_hint'), text=item['ar'] if item else '')
+        f_en = FormField(tr('word_en'), hint='apple', text=item['en'] if item else '', vk_lang='en')
+        f_ar = FormField(tr('word_ar'), hint=tr('word_ar_hint'), text=item['ar'] if item else '', vk_lang='ar')
         ex_box = vbox(spacing=dp(10))
-        f_ex = FormField(tr('example_en'), hint='I eat an apple.', text=item['ex'] if item else '')
+        f_ex = FormField(tr('example_en'), hint='I eat an apple.', text=item['ex'] if item else '', vk_lang='en')
         f_exar = FormField(tr('example_ar'), hint=tr('example_ar_hint'),
-                           text=item['ex_ar'] if item else '')
+                           text=item['ex_ar'] if item else '', vk_lang='ar')
         ex_box.add_widget(f_ex)
         ex_box.add_widget(f_exar)
         body.add_widget(f_en)
@@ -1100,8 +1100,8 @@ class SettingsScreen(BaseScreen):
         c.add_widget(Segmented([(str(n), str(n)) for n in (5, 10, 15, 20)],
                                str(db.get_int('round_size', 10)),
                                on_change=lambda v: db.set('round_size', v)))
-        c.add_widget(switch_row(tr('s_native_input'), db.get_bool('native_input'),
-                                self._set_native, sub=tr('s_native_input_d')))
+        c.add_widget(switch_row(tr('s_inapp_kb'), db.get_bool('inapp_keyboard'),
+                                self._set_inapp_kb, sub=tr('s_inapp_kb_d')))
         c.add_widget(switch_row(tr('s_unlock_all'), db.get_bool('unlock_all'),
                                 lambda v: db.set('unlock_all', '1' if v else '0'),
                                 sub=tr('s_unlock_all_d')))
@@ -1144,9 +1144,9 @@ class SettingsScreen(BaseScreen):
         if v:
             self.app.sfx.play('correct')
 
-    def _set_native(self, v):
-        self.app.db.set('native_input', '1' if v else '0')
-        widgets_mod.NATIVE_INPUT['on'] = bool(v)
+    def _set_inapp_kb(self, v):
+        self.app.db.set('inapp_keyboard', '1' if v else '0')
+        widgets_mod.VK['on'] = bool(v)
 
     def _set_div(self, key, value):
         self.app.db.set(key, value)
@@ -1178,7 +1178,7 @@ class SettingsScreen(BaseScreen):
     def import_dialog(self):
         app = self.app
         body = vbox(spacing=dp(10))
-        path_field = FormField(tr('import_path'), hint='/storage/emulated/0/Download/...json')
+        path_field = FormField(tr('import_path'), hint='/storage/emulated/0/Download/...json', vk_lang='en')
         path_field.input.halign = 'left'
         body.add_widget(label(tr('import_found'), size=13, color='sub', bold=True))
         found = app.storage.list_backups()
