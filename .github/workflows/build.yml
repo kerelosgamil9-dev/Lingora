@@ -63,6 +63,23 @@ jobs:
       - name: Build debug APK
         run: buildozer -v android debug > build.log 2>&1
 
+      - name: Sign the APK with the fixed key (so it can update the installed app)
+        run: |
+          APKSIGNER=$(find ~/.buildozer -name apksigner -type f | sort -V | tail -n 1)
+          echo "apksigner: $APKSIGNER"
+          if [ -z "$APKSIGNER" ]; then
+            echo "WARNING: apksigner not found, the APK keeps Gradle's own signature"
+            exit 0
+          fi
+          for f in bin/*.apk; do
+            "$APKSIGNER" sign --ks lingora.keystore --ks-pass pass:android \
+              --key-pass pass:android --ks-key-alias androiddebugkey "$f"
+            echo "== $f"
+            "$APKSIGNER" verify --print-certs "$f" | grep -i "SHA-256"
+          done
+          echo "== keystore"
+          keytool -list -v -keystore lingora.keystore -storepass android | grep -i "SHA256"
+
       - name: Show the error (only runs if the build failed)
         if: failure()
         run: |
