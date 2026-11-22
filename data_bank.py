@@ -119,16 +119,26 @@ def group_of(n):
 
 
 def prev_in_group(n):
-    """Id of the level that must be passed before n (None for a group's first)."""
+    """Id of the level that must be passed before n (None for the very first level).
+    The beginner track (group 'extra') starts only after the main review is passed."""
     ids = group_ids(group_of(n))
-    if n not in ids or ids.index(n) == 0:
+    if n not in ids:
         return None
-    return ids[ids.index(n) - 1]
+    i = ids.index(n)
+    if i == 0:
+        return MAIN_REVIEW_ID if group_of(n) == 'extra' else None
+    return ids[i - 1]
 
 
 def next_in_group(n):
+    """Level that passing n unlocks (the main review unlocks the beginner track)."""
     ids = group_ids(group_of(n))
-    if n not in ids or ids.index(n) == len(ids) - 1:
+    if n not in ids:
+        return None
+    if ids.index(n) == len(ids) - 1:
+        if n == MAIN_REVIEW_ID:
+            extra = group_ids('extra')
+            return extra[0] if extra else None
         return None
     return ids[ids.index(n) + 1]
 
